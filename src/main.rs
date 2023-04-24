@@ -1,11 +1,13 @@
-use std::ops::Add;
+mod rng_buffer;
+
+use std::ops::{Add};
 use std::time::{Duration, Instant};
-use rand::{Rng};
 use softbuffer::GraphicsContext;
 use winit::dpi::{PhysicalSize};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder, WindowId};
+use crate::rng_buffer::RngBuffer;
 
 fn main() {
     let event_loop = EventLoop::new();
@@ -14,6 +16,9 @@ fn main() {
     graphics_window.window.set_title("Test");
     graphics_window.window.set_resizable(false);
     graphics_window.window.set_inner_size(PhysicalSize::new(800, 600));
+
+    let mut rng_buffer = RngBuffer::new(100_000);
+    rng_buffer.init(());
 
 
     event_loop.run(move |event, _, control_flow| {
@@ -29,7 +34,7 @@ fn main() {
             EventResponse::Exit => { *control_flow = ControlFlow::Exit }
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
-                draw(&mut graphics_window.graphics_buffer);
+                draw(&mut graphics_window.graphics_buffer, &mut rng_buffer);
                 graphics_window.window.request_redraw();
             }
             EventResponse::None => {}
@@ -58,12 +63,25 @@ enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
 }
 
-fn draw(buffer: &mut GraphicsBuffer) {
-    //dbg!("drawing");
+fn draw(buffer: &mut GraphicsBuffer, rng_buffer: &mut RngBuffer) {
+
+    buffer.clear(Color::BLACK);
+
 
     // TODO ...
 
-    for _i in 0..10000 {
+
+    for x in 0..buffer.width {
+        for y in 0..buffer.height {
+            let r = rng_buffer.next() as u8;
+            let g = rng_buffer.next() as u8;
+            let b = rng_buffer.next() as u8;
+            buffer.draw_pixel(x, y, Color::from_rgb(r, g, b));
+        }
+    }
+
+    /*
+    for _i in 0..100000 {
         let x = rand::thread_rng().gen_range(0..buffer.width);
         let y = rand::thread_rng().gen_range(0..buffer.height);
         let r = rand::thread_rng().gen_range(0..255);
@@ -71,6 +89,7 @@ fn draw(buffer: &mut GraphicsBuffer) {
         let b = rand::thread_rng().gen_range(0..255);
         buffer.draw_pixel(x, y, Color::from_rgb(r, g, b));
     }
+    */
 }
 
 struct GraphicsWindow {
@@ -111,6 +130,16 @@ impl GraphicsBuffer {
         }
     }
 
+    fn clear(&mut self, color: Color) {
+
+        // TODO ...
+        //self.pixel_buffer.iter_mut().for_each(|px| *px = 0);
+
+        self.pixel_buffer.set_all(color.to_u32());
+
+        //self.pixel_buffer[index as usize] = color.to_u32();
+    }
+
     fn draw_pixel(&mut self, x: u32, y: u32, color: Color) {
         let index = x + self.width * y;
         self.pixel_buffer[index as usize] = color.to_u32();
@@ -120,6 +149,24 @@ impl GraphicsBuffer {
         graphics_context.set_buffer(&self.pixel_buffer, self.width as u16, self.height as u16);
     }
 }
+
+/*************************************************************/
+// Allows calling .set_all(some_value) on an array to set all values in the array to some_value.
+// Taken from https://stackoverflow.com/a/49193323/17816986
+trait SetAll {
+    type Elem;
+    fn set_all(&mut self, value: Self::Elem);
+}
+
+impl<T> SetAll for [T] where T: Clone {
+    type Elem = T;
+    fn set_all(&mut self, value: Self::Elem) {
+        for e in self {
+            *e = value.clone();
+        }
+    }
+}
+/*************************************************************/
 
 struct Color {
     r: u8,
