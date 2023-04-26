@@ -1,22 +1,53 @@
 use softbuffer::GraphicsContext;
+use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
+pub struct WindowConfig {
+    pub title: String,
+    pub resizable: bool,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl WindowConfig {
+    fn apply(&self, window: Window) -> Window {
+        window.set_title(self.title.as_str());
+        window.set_resizable(self.resizable);
+        window.set_inner_size(PhysicalSize::new(self.width, self.height));
+        return window;
+    }
+}
+
 pub struct GraphicsWindow {
-    pub window: Window,
+    window: Window,
     graphics_context: GraphicsContext,
-    pub graphics_buffer: GraphicsBuffer,
+    graphics_buffer: GraphicsBuffer,
+}
+
+fn build_window(event_loop: &EventLoop<()>, config: WindowConfig) -> Window {
+    config.apply(
+        WindowBuilder::new()
+            .build(&event_loop)
+            .unwrap()
+    )
 }
 
 impl GraphicsWindow {
-    pub fn build(event_loop: &EventLoop<()>) -> GraphicsWindow {
-        let window = WindowBuilder::new().build(&event_loop).unwrap();
-        GraphicsWindow {
+    pub fn build(config: WindowConfig) -> (GraphicsWindow, EventLoop<()>) {
+        let event_loop = EventLoop::new();
+        let window = build_window(&event_loop, config);
+        let graphics_window = GraphicsWindow {
             graphics_context: unsafe { GraphicsContext::new(&window, &window) }.unwrap(),
             graphics_buffer: GraphicsBuffer::create_for_window(&window),
             window,
-        }
+        };
+        return (graphics_window, event_loop);
     }
+
+    pub fn get_graphics(&mut self) -> &mut GraphicsBuffer { &mut self.graphics_buffer }
+
+    pub fn get_window(&self) -> &Window { &self.window }
 
     pub fn redraw(&mut self) {
         self.graphics_buffer.redraw(&mut self.graphics_context);

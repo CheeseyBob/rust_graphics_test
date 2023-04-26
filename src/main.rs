@@ -1,32 +1,27 @@
 mod graphics_window;
 mod rng_buffer;
 
-use std::ops::{Add};
+use std::ops::Add;
 use std::time::{Duration, Instant};
-use winit::dpi::{PhysicalSize};
 use winit::event::{Event, StartCause, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::{ControlFlow};
 use winit::window::WindowId;
-use crate::graphics_window::{Color, GraphicsBuffer, GraphicsWindow};
+use crate::graphics_window::{Color, GraphicsBuffer, GraphicsWindow, WindowConfig};
 use crate::rng_buffer::RngBuffer;
 
 fn main() {
-    let event_loop = EventLoop::new();
-
-    let mut graphics_window = GraphicsWindow::build(&event_loop);
-    graphics_window.window.set_title("Test");
-    graphics_window.window.set_resizable(false);
-    graphics_window.window.set_inner_size(PhysicalSize::new(800, 600));
+    let config = WindowConfig {
+        title: String::from("Test"),
+        resizable: false,
+        width: 800,
+        height: 600,
+    };
+    let (mut graphics_window, event_loop) = GraphicsWindow::build(config);
 
     let mut rng_buffer = RngBuffer::new(100_000);
     rng_buffer.init(());
 
-
     event_loop.run(move |event, _, control_flow| {
-
-        //*control_flow = ControlFlow::Wait;
-
-        //dbg!(&event);
 
         let next_tick = Instant::now().add(Duration::from_millis(1000/60));
         *control_flow = ControlFlow::WaitUntil(next_tick);
@@ -35,8 +30,8 @@ fn main() {
             EventResponse::Exit => { *control_flow = ControlFlow::Exit }
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
-                draw(&mut graphics_window.graphics_buffer, &mut rng_buffer);
-                graphics_window.window.request_redraw();
+                draw(&mut graphics_window.get_graphics(), &mut rng_buffer);
+                graphics_window.get_window().request_redraw();
             }
             EventResponse::None => {}
         }
@@ -64,20 +59,20 @@ enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
 }
 
-fn draw(buffer: &mut GraphicsBuffer, rng_buffer: &mut RngBuffer) {
+fn draw(graphics: &mut GraphicsBuffer, rng_buffer: &mut RngBuffer) {
 
-    buffer.clear(Color::BLACK);
+    graphics.clear(Color::BLACK);
 
 
     // TODO ...
 
 
-    for x in 0..buffer.get_width() {
-        for y in 0..buffer.get_height() {
+    for x in 0..graphics.get_width() {
+        for y in 0..graphics.get_height() {
             let r = rng_buffer.next() as u8;
             let g = rng_buffer.next() as u8;
             let b = rng_buffer.next() as u8;
-            buffer.draw_pixel(x, y, Color::from_rgb(r, g, b));
+            graphics.draw_pixel(x, y, Color::from_rgb(r, g, b));
         }
     }
 
