@@ -64,12 +64,11 @@ fn main() {
     let mut object_grid = World::new(256, 256);
 
 
-    /*
     match matrix_test::run() {
         None => exit(0),
         Some(_) => {},
     }
-    */
+
 
 
     let config = WindowConfig {
