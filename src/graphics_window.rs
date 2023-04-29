@@ -56,8 +56,8 @@ impl GraphicsWindow {
 
 pub struct GraphicsBuffer {
     pixel_buffer: Vec<u32>,
-    width: u32,
-    height: u32,
+    width: usize,
+    height: usize,
 }
 
 impl GraphicsBuffer {
@@ -66,8 +66,8 @@ impl GraphicsBuffer {
         let buffer_size = window_size.width * window_size.height;
         Self {
             pixel_buffer: vec![0; buffer_size as usize],
-            width: window_size.width,
-            height: window_size.height,
+            width: window_size.width as usize,
+            height: window_size.height as usize,
         }
     }
 
@@ -81,14 +81,14 @@ impl GraphicsBuffer {
         //self.pixel_buffer[index as usize] = color.to_u32();
     }
 
-    pub fn draw_pixel(&mut self, x: u32, y: u32, color: Color) {
+    pub fn draw_pixel(&mut self, x: usize, y: usize, color: Color) {
         let index = x + self.width * y;
-        self.pixel_buffer[index as usize] = color.to_u32();
+        self.pixel_buffer[index] = color.to_u32();
     }
 
-    pub fn get_height(&self) -> u32 { self.height }
+    pub fn get_height(&self) -> usize { self.height }
 
-    pub fn get_width(&self) -> u32 { self.width }
+    pub fn get_width(&self) -> usize { self.width }
 
     fn redraw(&self, graphics_context: &mut GraphicsContext) {
         graphics_context.set_buffer(&self.pixel_buffer, self.width as u16, self.height as u16);

@@ -15,6 +15,12 @@ impl RngBuffer {
         }
     }
 
+    pub fn init_new(capacity: usize, _generator: ()) -> RngBuffer {
+        let mut rng_buffer = RngBuffer::new(capacity);
+        rng_buffer.init(_generator);
+        return rng_buffer;
+    }
+
     pub fn init(&mut self, _generator: ()) { // TODO - Needs the generating function to be supplied too.
         for i in 0..self.capacity {
             self.buffer[i] = rand::thread_rng().gen_range(0..255);
