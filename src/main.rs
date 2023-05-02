@@ -1,73 +1,38 @@
 mod graphics_window;
 mod rng_buffer;
 mod matrix_test;
+mod world;
 
 use std::ops::Add;
 use std::process::exit;
 use std::time::{Duration, Instant};
-use rand::Rng;
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow};
 use winit::window::WindowId;
 use crate::graphics_window::{Color, GraphicsBuffer, GraphicsWindow, WindowConfig};
 use crate::rng_buffer::RngBuffer;
-
-struct World {
-    data: Vec<(usize, usize)>,
-    width: usize,
-    height: usize,
-    rng_buffer: RngBuffer,
-}
-
-impl World {
-    fn new(width: usize, height: usize) -> World {
-        World {
-            data: Vec::from([(99, 99), (99, 99), (99, 99)]),
-            width,
-            height,
-            rng_buffer: RngBuffer::init_new(100_000, ())
-        }
-    }
-
-    fn draw(&self, graphics: &mut GraphicsBuffer) {
-        graphics.clear(Color::BLACK);
-
-        for object in &self.data {
-            let (x, y) = object;
-            graphics.draw_pixel(*x, *y, Color::WHITE);
-        }
-    }
-
-    fn step(&mut self) {
-        for i in 0..self.data.len() {
-            let (mut x, mut y) = self.data[i];
-
-            let dx: isize = rand::thread_rng().gen_range(0..3) - 1;
-            let dy: isize = rand::thread_rng().gen_range(0..3) - 1;
-
-            match x.checked_add_signed(dx) {
-                Some(new_x) if new_x < self.width => { x = new_x }
-                _ => {}
-            }
-            match y.checked_add_signed(dy) {
-                Some(new_y) if new_y < self.height => { y = new_y }
-                _ => {}
-            }
-
-            self.data[i] = (x, y);
-        }
-    }
-}
+use crate::world::World;
 
 fn main() {
 
-    let mut object_grid = World::new(256, 256);
+    let mut v = vec![1, 2, 3];
+    for i in &mut v {
+        *i += 1;
+        dbg!(i);
+    }
+
+    exit(0); // ---------------------------
 
 
+    let mut world = World::new(256, 256);
+
+
+    /*
     match matrix_test::run() {
         None => exit(0),
         Some(_) => {},
     }
+    */
 
 
 
@@ -91,8 +56,8 @@ fn main() {
             EventResponse::Exit => { *control_flow = ControlFlow::Exit }
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
-                object_grid.step();
-                object_grid.draw(&mut graphics_window.get_graphics());
+                world.step();
+                world.draw(&mut graphics_window.get_graphics());
                 //draw_noise(&mut graphics_window.get_graphics(), &mut rng_buffer);
                 graphics_window.get_window().request_redraw();
             }
@@ -122,6 +87,7 @@ enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
 }
 
+#[allow(unused)]
 fn draw_noise(graphics: &mut GraphicsBuffer, rng_buffer: &mut RngBuffer) {
     graphics.clear(Color::BLACK);
 

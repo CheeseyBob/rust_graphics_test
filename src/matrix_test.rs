@@ -1,6 +1,6 @@
-use std::ops::Mul;
 use nalgebra::{DMatrix, DVector};
 
+#[allow(unused)]
 pub(crate) fn run() -> Option<()>{
 
     println!("running matrix text...");
