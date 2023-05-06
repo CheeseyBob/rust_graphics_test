@@ -4,7 +4,6 @@ mod matrix_test;
 mod world;
 
 use std::ops::Add;
-use std::process::exit;
 use std::time::{Duration, Instant};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow};
@@ -14,16 +13,6 @@ use crate::rng_buffer::RngBuffer;
 use crate::world::World;
 
 fn main() {
-
-    let mut v = vec![1, 2, 3];
-    for i in &mut v {
-        *i += 1;
-        dbg!(i);
-    }
-
-    exit(0); // ---------------------------
-
-
     let mut world = World::new(256, 256);
 
 
