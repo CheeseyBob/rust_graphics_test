@@ -2,79 +2,21 @@ mod graphics_window;
 mod rng_buffer;
 mod matrix_test;
 mod world;
+mod fps_counter;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow};
 use winit::window::WindowId;
+use crate::fps_counter::FpsCounter;
 use crate::graphics_window::{Color, GraphicsBuffer, GraphicsWindow, WindowConfig};
 use crate::rng_buffer::RngBuffer;
 use crate::world::World;
 
-struct FpsCounter {
-    frame_time_buffer: [u128; 32],
-    current_frame: usize,
-    current_frame_start: Instant,
-    mode: Mode
-}
-
-enum Mode {
-    Off,
-    Every4Frames,
-    Every8Frames,
-    Every16Frames,
-    Every32Frames
-}
-
-impl FpsCounter {
-    fn new() -> FpsCounter {
-        FpsCounter::with_mode(Mode::Every16Frames)
-    }
-
-    fn with_mode(mode: Mode) -> FpsCounter {
-        FpsCounter {
-            frame_time_buffer: [0_u128; 32],
-            current_frame: 0,
-            current_frame_start: Instant::now(),
-            mode,
-        }
-    }
-
-    fn print_fps(&self) {
-        let frame_count = match self.mode {
-            Mode::Off => return,
-            Mode::Every4Frames => 4,
-            Mode::Every8Frames => 8,
-            Mode::Every16Frames => 16,
-            Mode::Every32Frames => 32,
-        };
-        if self.current_frame % frame_count != 0 { return; }
-
-        let mut total_millis = 0;
-        for i in 1..=frame_count {
-            let frame = (self.current_frame + 32 - i) % 32;
-            total_millis += self.frame_time_buffer[frame];
-        }
-        let average_frame_time_millis = total_millis / frame_count as u128;
-        let fps = 1000_u128.checked_div(average_frame_time_millis).unwrap_or(0);
-        println!("fps: {}", fps);
-    }
-
-    fn set_mode(&mut self, mode: Mode) {
-        self.mode = mode;
-    }
-
-    fn tick(&mut self) {
-        self.frame_time_buffer[self.current_frame] = self.current_frame_start.elapsed().as_millis();
-        self.current_frame_start = Instant::now();
-        self.current_frame = (self.current_frame + 1) % 32;
-        self.print_fps();
-    }
-}
 
 fn main() {
-    let mut fps_counter = FpsCounter::with_mode(Mode::Every32Frames);
+    let mut fps_counter = FpsCounter::every_32_frames();
 
     let mut world = World::new(256, 256);
     world.load();
@@ -109,26 +51,12 @@ fn main() {
             EventResponse::Exit => { *control_flow = ControlFlow::Exit }
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
-                //let start = Instant::now();
                 fps_counter.tick();
-
 
                 world.step();
                 world.draw(&mut graphics_window.get_graphics());
                 //draw_noise(&mut graphics_window.get_graphics(), &mut rng_buffer);
                 graphics_window.get_window().request_redraw();
-
-                /*
-                let elapsed = start.elapsed();
-                frame_times[current_frame] = elapsed.as_millis();
-                current_frame = (current_frame + 1) % FRAME_TIME_BUFFER_LENGTH;
-                if current_frame == 0 {
-                    let average_frame_time_millis = frame_times.iter().sum::<u128>() / FRAME_TIME_BUFFER_LENGTH as u128;
-                    let fps = 1000 / average_frame_time_millis;
-                    println!("fps: {}", fps);
-                }
-                */
-
             }
             EventResponse::None => {}
         }
