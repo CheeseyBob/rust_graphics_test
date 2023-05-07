@@ -21,7 +21,7 @@ fn main() {
 
     let mut fps_counter = FpsCounter::every_32_frames();
 
-    let mut rng = RngBuffer::with_capacity(1000);
+    let mut rng = RngBuffer::with_capacity(1_000);
 
     let mut world = World::new(800, 600);
     world.load(&mut rng);

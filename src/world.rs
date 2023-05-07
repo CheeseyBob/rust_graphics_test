@@ -199,12 +199,22 @@ impl World {
     }
 
     pub fn load(&mut self, rng: &mut RngBuffer) {
+        let mut unplaced_entity_count = 0;
+        for _ in 0..5_000 {
+            let x = (rng.generate_next() * self.width as f64) as usize;
+            let y = (rng.next() * self.height as f64) as usize;
+            let entity = Entity::new(x, y, &self, rng);
+            if self.place_entity(entity).is_err() { unplaced_entity_count += 1 }
+        }
+        dbg!(unplaced_entity_count);
+        /*
         for x in 100..200 {
             for y in 100..200 {
                 let entity = Entity::new(x, y, &self, rng);
                 self.place_entity(entity).expect("should be able to place here");
             }
         }
+        */
     }
 
     pub fn step(&mut self, rng: &mut RngBuffer) {

@@ -28,4 +28,12 @@ impl RngBuffer {
         self.next = (self.next + 1) % self.capacity;
         self.buffer[self.next]
     }
+
+    /// Regenerate and return the next value in te RNG buffer.
+    /// Use this instead of `next()` only when you want to refresh the values in the buffer.
+    pub fn generate_next(&mut self) -> f64 {
+        self.next = (self.next + 1) % self.capacity;
+        self.buffer[self.next] = random();
+        self.buffer[self.next]
+    }
 }
