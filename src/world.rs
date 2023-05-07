@@ -62,8 +62,6 @@ impl Location {
         Location {
             x: self.x.wrapping_add_signed(direction.x as isize) % world.width,
             y: self.y.wrapping_add_signed(direction.y as isize) % world.height,
-            //x: self.x.wrapping_add_signed(direction.x as isize),
-            //y: self.y.wrapping_add_signed(direction.y as isize),
         }
     }
 }
@@ -164,8 +162,8 @@ impl World {
     }
 
     pub fn load(&mut self) {
-        for x in 10..20 {
-            for y in 10..20 {
+        for x in 190..200 {
+            for y in 190..200 {
                 self.place_entity(Entity::new(x, y)).expect("should be able to place here");
             }
         }
