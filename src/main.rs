@@ -15,6 +15,8 @@ use crate::world::World;
 fn main() {
     let mut world = World::new(256, 256);
 
+    world.load();
+
 
     /*
     match matrix_test::run() {

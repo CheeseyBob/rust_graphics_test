@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ptr::eq;
 use rand::Rng;
 use crate::graphics_window::{Color, GraphicsBuffer};
 use crate::rng_buffer::RngBuffer;
@@ -83,7 +84,9 @@ impl Entity {
 }
 
 enum Action {
-    Wait,
+    Wait {
+        location: Location
+    },
     Move {
         from: Location,
         to: Location,
@@ -91,12 +94,39 @@ enum Action {
 }
 
 impl Action {
+    fn affected_locations(&self) -> Vec<&Location> {
+        match self {
+            Action::Wait { location } => vec![location],
+            Action::Move { from, to } => vec![from, to],
+        }
+    }
+
+    fn resolve(&self, conflict_map: &HashMap<(usize, usize), Vec<&Action>>) -> Outcome {
+        match self {
+            Action::Wait { .. } => Outcome::Wait,
+            Action::Move { from, to } => {
+                let conflicts = conflict_map.get(&to.coordinates()).expect("conflict should be present at this location");
+                for conflict in conflicts {
+                    if !eq(*conflict, self) {
+                        return Outcome::Wait;
+                    }
+                }
+                return Outcome::Move { from: from.clone(), to: to.clone() }
+            }
+        }
+    }
+
     fn move_in_direction(location: Location, direction: Direction) -> Action {
         Action::Move {
             to: location.plus(direction),
             from: location,
         }
     }
+}
+
+enum Outcome {
+    Wait,
+    Move { from: Location, to: Location }
 }
 
 pub struct World {
@@ -124,27 +154,50 @@ impl World {
         }
     }
 
-    pub fn step(&mut self) {
-        if self.entities.len() < 50 {
-            match self.place_entity(Entity::new(50 + 10 * self.entities.len(), 100)) {
-                Ok(_) => {}
-                Err(_) => {}
+    pub fn load(&mut self) {
+        for x in 100..150 {
+            for y in 100..150 {
+                self.place_entity(Entity::new(x, y)).expect("should be able to place here");
             }
         }
+    }
 
+    pub fn step(&mut self) {
+        // Determine entity actions.
         let actions: Vec<Action> = self.entities.values()
             .map(Entity::step)
             .collect();
 
-        for action in actions {
-            self.resolve_action(&action);
+        // Find conflicting actions.
+        let mut conflict_map: HashMap<(usize, usize), Vec<&Action>> = HashMap::with_capacity(actions.len());
+        for action in &actions {
+            for location in action.affected_locations() {
+                let coordinates = location.coordinates();
+
+                let mut conflict = conflict_map.remove(&coordinates)
+                    .unwrap_or(Vec::new());
+                conflict.push(&action);
+                conflict_map.insert(coordinates, conflict);
+            }
+        }
+
+        // Resolve actions while avoiding conflicts.
+        let action_outcomes: Vec<Outcome> = actions.iter()
+            .map(|action| action.resolve(&conflict_map))
+            .collect();
+
+        // Apply action outcomes.
+        for outcome in action_outcomes {
+            self.apply_action_outcome(outcome);
         }
     }
 
-    fn resolve_action(&mut self, action: &Action) {
-        match action {
-            Action::Wait => {},
-            Action::Move { from, to } => self.resolve_move(*from, *to),
+    fn apply_action_outcome(&mut self, outcome: Outcome) {
+        match outcome {
+            Outcome::Wait => {}
+            Outcome::Move { from, to } => {
+                self.resolve_move(from, to);
+            }
         }
     }
 
