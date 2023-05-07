@@ -14,8 +14,11 @@ use crate::graphics_window::{Color, GraphicsBuffer, GraphicsWindow, WindowConfig
 use crate::rng_buffer::RngBuffer;
 use crate::world::World;
 
-
 fn main() {
+    let target_fps = 1000;
+    let target_frame_time: Duration = Duration::from_millis(1000 / target_fps);
+    let mut next_tick = Instant::now().add(target_frame_time);
+
     let mut fps_counter = FpsCounter::every_32_frames();
 
     let mut world = World::new(256, 256);
@@ -44,18 +47,18 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
 
-        let next_tick = Instant::now().add(Duration::from_millis(1000/60));
-        *control_flow = ControlFlow::WaitUntil(next_tick);
+        if Instant::now() > next_tick {
+            next_tick = next_tick.add(target_frame_time);
+            *control_flow = ControlFlow::WaitUntil(next_tick);
+        }
 
         match handle_event(&event) {
             EventResponse::Exit => { *control_flow = ControlFlow::Exit }
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
                 fps_counter.tick();
-
                 world.step();
                 world.draw(&mut graphics_window.get_graphics());
-                //draw_noise(&mut graphics_window.get_graphics(), &mut rng_buffer);
                 graphics_window.get_window().request_redraw();
             }
             EventResponse::None => {}

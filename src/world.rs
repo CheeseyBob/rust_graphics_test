@@ -1,70 +1,81 @@
 use std::collections::HashMap;
 use std::ptr::eq;
-use rand::Rng;
 use crate::graphics_window::{Color, GraphicsBuffer};
 use crate::rng_buffer::RngBuffer;
+use crate::world::location::{Direction, Location};
 
-#[derive(Copy, Clone)]
-struct Direction { x: i8, y: i8 }
 
-impl Direction {
-    const NORTH: Direction = Direction::new(0, -1);
-    const NORTHEAST: Direction = Direction::new(1, -1);
-    const EAST: Direction = Direction::new(1, 0);
-    const SOUTHEAST: Direction = Direction::new(1, 1);
-    const SOUTH: Direction = Direction::new(0, 1);
-    const SOUTHWEST: Direction = Direction::new(-1, 1);
-    const WEST: Direction = Direction::new(-1, 0);
-    const NORTHWEST: Direction = Direction::new(-1, -1);
+mod location {
+    use rand::Rng;
+    use crate::world::World;
 
-    const fn new(x: i8, y: i8) -> Direction {
-        Direction { x: Self::valid(x), y: Self::valid(y) }
-    }
+    #[derive(Copy, Clone)]
+    pub struct Direction { x: i8, y: i8 }
 
-    const fn valid(coord: i8) -> i8 {
-        match coord {
-            1 | 0 | -1 => coord,
-            _ => panic!("coordinates should be either 1, 0 or -1")
+    impl Direction {
+        const NORTH: Direction = Direction::new(0, -1);
+        const NORTHEAST: Direction = Direction::new(1, -1);
+        const EAST: Direction = Direction::new(1, 0);
+        const SOUTHEAST: Direction = Direction::new(1, 1);
+        const SOUTH: Direction = Direction::new(0, 1);
+        const SOUTHWEST: Direction = Direction::new(-1, 1);
+        const WEST: Direction = Direction::new(-1, 0);
+        const NORTHWEST: Direction = Direction::new(-1, -1);
+
+        pub const fn new(x: i8, y: i8) -> Direction {
+            Direction { x: Self::valid(x), y: Self::valid(y) }
+        }
+
+        const fn valid(coord: i8) -> i8 {
+            match coord {
+                1 | 0 | -1 => coord,
+                _ => panic!("coordinates should be either 1, 0 or -1")
+            }
+        }
+
+        pub fn random() -> Direction {
+            match rand::thread_rng().gen_range(0..8) {
+                0 => Direction::NORTH,
+                1 => Direction::NORTHEAST,
+                2 => Direction::EAST,
+                3 => Direction::SOUTHEAST,
+                4 => Direction::SOUTH,
+                5 => Direction::SOUTHWEST,
+                6 => Direction::WEST,
+                7 => Direction::NORTHWEST,
+                _ => panic!("generated index should be in range")
+            }
         }
     }
 
-    fn random() -> Direction {
-        match rand::thread_rng().gen_range(0..8) {
-            0 => Direction::NORTH,
-            1 => Direction::NORTHEAST,
-            2 => Direction::EAST,
-            3 => Direction::SOUTHEAST,
-            4 => Direction::SOUTH,
-            5 => Direction::SOUTHWEST,
-            6 => Direction::WEST,
-            7 => Direction::NORTHWEST,
-            _ => panic!("generated index should be in range")
+    #[derive(Copy, Clone)]
+    pub struct Location { x: usize, y: usize }
+
+    impl Location {
+        pub fn new(x: usize, y: usize, world: &World) -> Location {
+            Location {
+                x: x % world.width,
+                y: y % world.height,
+            }
         }
+
+        pub fn coordinates(&self) -> (usize, usize) {
+            (self.x, self.y)
+        }
+
+        pub fn plus(&self, direction: Direction, world: &World) -> Location {
+            Location {
+                x: self.x.wrapping_add_signed(direction.x as isize) % world.width,
+                y: self.y.wrapping_add_signed(direction.y as isize) % world.height,
+            }
+        }
+
+        pub fn x(&self) -> usize { self.x }
+
+        pub fn y(&self) -> usize { self.y }
     }
 }
 
-#[derive(Copy, Clone)]
-struct Location { x: usize, y: usize }
-
-impl Location {
-    fn new(x: usize, y: usize, world: &World) -> Location {
-        Location {
-            x: x % world.width,
-            y: y % world.height,
-        }
-    }
-
-    fn coordinates(&self) -> (usize, usize) {
-        (self.x, self.y)
-    }
-
-    fn plus(&self, direction: Direction, world: &World) -> Location {
-        Location {
-            x: self.x.wrapping_add_signed(direction.x as isize) % world.width,
-            y: self.y.wrapping_add_signed(direction.y as isize) % world.height,
-        }
-    }
-}
 
 pub struct Entity {
     location: Location,
@@ -72,12 +83,12 @@ pub struct Entity {
 
 impl Entity {
     fn draw(&self, graphics: &mut GraphicsBuffer) {
-        graphics.draw_pixel(self.location.x, self.location.y, Color::WHITE);
+        graphics.draw_pixel(self.location.x(), self.location.y(), Color::WHITE);
     }
 
-    fn new(x: usize, y: usize) -> Entity {
+    fn new(x: usize, y: usize, world: &World) -> Entity {
         Entity {
-            location: Location { x, y }
+            location: Location::new(x, y, world),
         }
     }
 
@@ -162,9 +173,10 @@ impl World {
     }
 
     pub fn load(&mut self) {
-        for x in 190..200 {
-            for y in 190..200 {
-                self.place_entity(Entity::new(x, y)).expect("should be able to place here");
+        for x in 100..102 {
+            for y in 100..102 {
+                let entity = Entity::new(x, y, &self);
+                self.place_entity(entity).expect("should be able to place here");
             }
         }
     }
