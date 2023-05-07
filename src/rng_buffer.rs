@@ -1,33 +1,30 @@
-use rand::Rng;
+use rand::random;
 
 pub struct RngBuffer {
-    buffer: Vec<i32>, // TODO - Change to a generic type.
+    buffer: Vec<f64>,
     capacity: usize,
     next: usize,
 }
 
+fn create_buffer(capacity: usize) -> Vec<f64> {
+    let mut buffer = Vec::with_capacity(capacity);
+    for _ in 0..capacity {
+        buffer.push(random());
+    }
+    return buffer;
+}
+
 impl RngBuffer {
-    pub fn new(capacity: usize) -> RngBuffer {
+    pub fn with_capacity(capacity: usize) -> RngBuffer {
         RngBuffer {
             capacity,
-            buffer: vec![0; capacity],
+            buffer: create_buffer(capacity),
             next: 0,
         }
     }
 
-    pub fn init_new(capacity: usize, _generator: ()) -> RngBuffer {
-        let mut rng_buffer = RngBuffer::new(capacity);
-        rng_buffer.init(_generator);
-        return rng_buffer;
-    }
-
-    pub fn init(&mut self, _generator: ()) { // TODO - Needs the generating function to be supplied too.
-        for i in 0..self.capacity {
-            self.buffer[i] = rand::thread_rng().gen_range(0..255);
-        }
-    }
-
-    pub fn next(&mut self) -> i32 {
+    /// Return the next value in the RNG buffer. The values are between 0.0 and 1.0.
+    pub fn next(&mut self) -> f64 {
         self.next = (self.next + 1) % self.capacity;
         self.buffer[self.next]
     }

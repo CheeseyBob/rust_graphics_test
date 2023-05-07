@@ -10,7 +10,7 @@ use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow};
 use winit::window::WindowId;
 use crate::fps_counter::FpsCounter;
-use crate::graphics_window::{Color, GraphicsBuffer, GraphicsWindow, WindowConfig};
+use crate::graphics_window::{GraphicsWindow, WindowConfig};
 use crate::rng_buffer::RngBuffer;
 use crate::world::World;
 
@@ -21,9 +21,10 @@ fn main() {
 
     let mut fps_counter = FpsCounter::every_32_frames();
 
-    let mut world = World::new(256, 256);
-    world.load();
+    let mut rng = RngBuffer::with_capacity(1000);
 
+    let mut world = World::new(800, 600);
+    world.load(&mut rng);
 
     /*
     match matrix_test::run() {
@@ -42,9 +43,6 @@ fn main() {
     };
     let (mut graphics_window, event_loop) = GraphicsWindow::build(config);
 
-    let mut rng_buffer = RngBuffer::new(100_000);
-    rng_buffer.init(());
-
     event_loop.run(move |event, _, control_flow| {
 
         if Instant::now() > next_tick {
@@ -57,7 +55,7 @@ fn main() {
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
                 fps_counter.tick();
-                world.step();
+                world.step(&mut rng);
                 world.draw(&mut graphics_window.get_graphics());
                 graphics_window.get_window().request_redraw();
             }
@@ -85,18 +83,4 @@ fn handle_window_event(event: &WindowEvent) -> EventResponse {
 
 enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
-}
-
-#[allow(unused)]
-fn draw_noise(graphics: &mut GraphicsBuffer, rng_buffer: &mut RngBuffer) {
-    graphics.clear(Color::BLACK);
-
-    for x in 0..graphics.get_width() {
-        for y in 0..graphics.get_height() {
-            let r = rng_buffer.next() as u8;
-            let g = rng_buffer.next() as u8;
-            let b = rng_buffer.next() as u8;
-            graphics.draw_pixel(x, y, Color::from_rgb(r, g, b));
-        }
-    }
 }

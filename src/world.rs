@@ -6,21 +6,22 @@ use crate::world::location::{Direction, Location};
 
 
 mod location {
-    use rand::Rng;
+    use std::ops::Add;
+    use crate::rng_buffer::RngBuffer;
     use crate::world::World;
 
     #[derive(Copy, Clone)]
     pub struct Direction { x: i8, y: i8 }
 
     impl Direction {
-        const NORTH: Direction = Direction::new(0, -1);
-        const NORTHEAST: Direction = Direction::new(1, -1);
-        const EAST: Direction = Direction::new(1, 0);
-        const SOUTHEAST: Direction = Direction::new(1, 1);
-        const SOUTH: Direction = Direction::new(0, 1);
-        const SOUTHWEST: Direction = Direction::new(-1, 1);
-        const WEST: Direction = Direction::new(-1, 0);
-        const NORTHWEST: Direction = Direction::new(-1, -1);
+        pub const NORTH: Direction = Direction::new(0, -1);
+        pub const NORTHEAST: Direction = Direction::new(1, -1);
+        pub const EAST: Direction = Direction::new(1, 0);
+        pub const SOUTHEAST: Direction = Direction::new(1, 1);
+        pub const SOUTH: Direction = Direction::new(0, 1);
+        pub const SOUTHWEST: Direction = Direction::new(-1, 1);
+        pub const WEST: Direction = Direction::new(-1, 0);
+        pub const NORTHWEST: Direction = Direction::new(-1, -1);
 
         pub const fn new(x: i8, y: i8) -> Direction {
             Direction { x: Self::valid(x), y: Self::valid(y) }
@@ -33,8 +34,8 @@ mod location {
             }
         }
 
-        pub fn random() -> Direction {
-            match rand::thread_rng().gen_range(0..8) {
+        pub fn random(rng: &mut RngBuffer) -> Direction {
+            match (rng.next() * 8.0) as usize {
                 0 => Direction::NORTH,
                 1 => Direction::NORTHEAST,
                 2 => Direction::EAST,
@@ -65,8 +66,8 @@ mod location {
 
         pub fn plus(&self, direction: Direction, world: &World) -> Location {
             Location {
-                x: self.x.wrapping_add_signed(direction.x as isize) % world.width,
-                y: self.y.wrapping_add_signed(direction.y as isize) % world.height,
+                x: world.width.wrapping_add_signed(direction.x as isize).add(self.x) % world.width,
+                y: world.height.wrapping_add_signed(direction.y as isize).add(self.y) % world.height,
             }
         }
 
@@ -79,6 +80,7 @@ mod location {
 
 pub struct Entity {
     location: Location,
+    facing: Direction,
 }
 
 impl Entity {
@@ -86,9 +88,10 @@ impl Entity {
         graphics.draw_pixel(self.location.x(), self.location.y(), Color::WHITE);
     }
 
-    fn new(x: usize, y: usize, world: &World) -> Entity {
+    fn new(x: usize, y: usize, world: &World, rng: &mut RngBuffer) -> Entity {
         Entity {
             location: Location::new(x, y, world),
+            facing: Direction::random(rng),
         }
     }
 
@@ -96,8 +99,18 @@ impl Entity {
         self.location = location;
     }
 
-    fn step(&self, world: &World) -> Action {
-        Action::move_in_direction(self.location, Direction::random(), world)
+    fn determine_action(&self, world: &World, rng: &mut RngBuffer) -> Action {
+        match rng.next() {
+            roll if roll < 0.05 => Action::turn(self.location, Direction::random(rng)),
+            roll if roll < 0.95 => Action::move_in_direction(self.location, self.facing, world),
+            _ => Action::wait(self.location),
+        }
+    }
+
+    fn step(&self, rng: &mut RngBuffer) {
+
+        // TODO ...
+
     }
 }
 
@@ -108,7 +121,11 @@ enum Action {
     Move {
         from: Location,
         to: Location,
-    }
+    },
+    Turn {
+        location: Location,
+        facing: Direction,
+    },
 }
 
 impl Action {
@@ -116,21 +133,23 @@ impl Action {
         match self {
             Action::Wait { location } => vec![location],
             Action::Move { from, to } => vec![from, to],
+            Action::Turn { location, facing: _ } => vec![location],
         }
     }
 
     fn resolve(&self, conflict_map: &HashMap<(usize, usize), Vec<&Action>>) -> Outcome {
         match self {
-            Action::Wait { .. } => Outcome::Wait,
+            Action::Wait { location } => Outcome::Wait { location: *location },
             Action::Move { from, to } => {
                 let conflicts = conflict_map.get(&to.coordinates()).expect("conflict should be present at this location");
                 for conflict in conflicts {
                     if !eq(*conflict, self) {
-                        return Outcome::Wait;
+                        return Outcome::Wait { location: *from };
                     }
                 }
-                return Outcome::Move { from: from.clone(), to: to.clone() }
+                return Outcome::Move { from: *from, to: *to }
             }
+            Action::Turn { location, facing } => Outcome::Turn { location: *location, facing: *facing },
         }
     }
 
@@ -140,18 +159,26 @@ impl Action {
             from: location,
         }
     }
+
+    fn turn(location: Location, facing: Direction) -> Action {
+        Action::Turn { location, facing }
+    }
+
+    fn wait(location: Location) -> Action {
+        Action::Wait { location }
+    }
 }
 
 enum Outcome {
-    Wait,
-    Move { from: Location, to: Location }
+    Wait { location: Location },
+    Move { from: Location, to: Location },
+    Turn { location: Location, facing: Direction },
 }
 
 pub struct World {
     entities: HashMap<(usize, usize), Entity>,
     width: usize,
     height: usize,
-    rng_buffer: RngBuffer,
 }
 
 impl World {
@@ -160,7 +187,6 @@ impl World {
             entities: HashMap::new(),
             width,
             height,
-            rng_buffer: RngBuffer::init_new(100_000, ())
         }
     }
 
@@ -172,19 +198,19 @@ impl World {
         }
     }
 
-    pub fn load(&mut self) {
-        for x in 100..102 {
-            for y in 100..102 {
-                let entity = Entity::new(x, y, &self);
+    pub fn load(&mut self, rng: &mut RngBuffer) {
+        for x in 100..200 {
+            for y in 100..200 {
+                let entity = Entity::new(x, y, &self, rng);
                 self.place_entity(entity).expect("should be able to place here");
             }
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self, rng: &mut RngBuffer) {
         // Determine entity actions.
         let actions: Vec<Action> = self.entities.values()
-            .map(|entity| entity.step(&self))
+            .map(|entity| entity.determine_action(&self, rng))
             .collect();
 
         // Find conflicting actions.
@@ -207,26 +233,41 @@ impl World {
 
         // Apply action outcomes.
         for outcome in action_outcomes {
-            self.apply_action_outcome(outcome);
+            self.apply_action_outcome(outcome, rng);
         }
     }
 
-    fn apply_action_outcome(&mut self, outcome: Outcome) {
+    fn apply_action_outcome(&mut self, outcome: Outcome, rng: &mut RngBuffer) {
         match outcome {
-            Outcome::Wait => {}
+            Outcome::Wait { location } => {
+                self.resolve_wait(location, rng);
+            }
             Outcome::Move { from, to } => {
-                self.resolve_move(from, to);
+                self.resolve_move(from, to, rng);
+            }
+            Outcome::Turn { location, facing } => {
+                self.resolve_turn(location, facing, rng);
             }
         }
     }
 
-    fn resolve_move(&mut self, from: Location, to: Location) {
-        let mut entity = self.entities.remove(&from.coordinates()).expect("entity to move should be at this location");
+    fn resolve_move(&mut self, from: Location, to: Location, rng: &mut RngBuffer) {
+        let mut entity = self.entities.remove(&from.coordinates()).expect("entity should be at this location");
         entity.set_location(to);
         match self.entities.insert(to.coordinates(), entity) {
             None => {}
             Some(_) => panic!("this location should be unoccupied")
         }
+    }
+
+    fn resolve_turn(&mut self, location: Location, facing: Direction, rng: &mut RngBuffer) {
+        let mut entity = self.entities.get_mut(&location.coordinates()).expect("entity should be at this location");
+        entity.facing = facing;
+    }
+
+    fn resolve_wait(&mut self, location: Location, rng: &mut RngBuffer) {
+        let mut entity = self.entities.get_mut(&location.coordinates()).expect("entity should be at this location");
+        entity.step(rng);
     }
 
     fn is_occupied(&self, location: &Location) -> bool {
