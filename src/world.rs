@@ -47,14 +47,23 @@ impl Direction {
 struct Location { x: usize, y: usize }
 
 impl Location {
+    fn new(x: usize, y: usize, world: &World) -> Location {
+        Location {
+            x: x % world.width,
+            y: y % world.height,
+        }
+    }
+
     fn coordinates(&self) -> (usize, usize) {
         (self.x, self.y)
     }
 
-    fn plus(&self, direction: Direction) -> Location {
+    fn plus(&self, direction: Direction, world: &World) -> Location {
         Location {
-            x: self.x.wrapping_add_signed(direction.x as isize),
-            y: self.y.wrapping_add_signed(direction.y as isize),
+            x: self.x.wrapping_add_signed(direction.x as isize) % world.width,
+            y: self.y.wrapping_add_signed(direction.y as isize) % world.height,
+            //x: self.x.wrapping_add_signed(direction.x as isize),
+            //y: self.y.wrapping_add_signed(direction.y as isize),
         }
     }
 }
@@ -78,8 +87,8 @@ impl Entity {
         self.location = location;
     }
 
-    fn step(&self) -> Action {
-        Action::move_in_direction(self.location, Direction::random())
+    fn step(&self, world: &World) -> Action {
+        Action::move_in_direction(self.location, Direction::random(), world)
     }
 }
 
@@ -116,9 +125,9 @@ impl Action {
         }
     }
 
-    fn move_in_direction(location: Location, direction: Direction) -> Action {
+    fn move_in_direction(location: Location, direction: Direction, world: &World) -> Action {
         Action::Move {
-            to: location.plus(direction),
+            to: location.plus(direction, world),
             from: location,
         }
     }
@@ -155,8 +164,8 @@ impl World {
     }
 
     pub fn load(&mut self) {
-        for x in 100..150 {
-            for y in 100..150 {
+        for x in 10..20 {
+            for y in 10..20 {
                 self.place_entity(Entity::new(x, y)).expect("should be able to place here");
             }
         }
@@ -165,7 +174,7 @@ impl World {
     pub fn step(&mut self) {
         // Determine entity actions.
         let actions: Vec<Action> = self.entities.values()
-            .map(Entity::step)
+            .map(|entity| entity.step(&self))
             .collect();
 
         // Find conflicting actions.
