@@ -18,7 +18,7 @@ impl RngBuffer {
     pub fn with_capacity(capacity: usize) -> RngBuffer {
         RngBuffer {
             capacity,
-            buffer: create_buffer(capacity),
+            buffer: create_buffer(capacity), // TODO - Test if this works: vec![random(); capacity],
             next: 0,
         }
     }
