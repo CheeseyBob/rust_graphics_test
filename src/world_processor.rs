@@ -23,6 +23,12 @@ impl WorldProcessor {
 
     pub fn step(&mut self, rng: &mut RngBuffer) {
 
+        // This is temporary - World should be updated to track entities in both a Vec and Grid simultaneously.
+        let locations_to_process: Vec<Location> = self.world.entity_grid.iter()
+            .filter_map(f!{opt -> opt.as_ref()})
+            .map(f!{entity -> entity.location})
+            .collect();
+
         // Determine entity actions.
         self.actions.fill_with(|| None);
         for space in self.world.entity_grid.iter() { match space {
@@ -42,9 +48,12 @@ impl WorldProcessor {
                 let action = self.actions.get(location.coordinates()).as_ref()
                     .expect("there should be an action at this location");
 
-                for direction in action.conflicting_directions() {
-                    let conflict_location = location.plus(direction, &self.world.entity_grid);
-                    self.conflicts.get_mut(conflict_location.coordinates()).add_from(direction);
+                match action.conflicting_directions() {
+                    None => {}
+                    Some(directions) => for direction in directions {
+                        let conflict_location = location.plus(&direction, &self.world.entity_grid);
+                        self.conflicts.get_mut(conflict_location.coordinates()).add_from(&direction);
+                    }
                 }
             }
         }}
@@ -57,11 +66,14 @@ impl WorldProcessor {
                 let action = self.actions.get(entity.location.coordinates()).as_ref()
                     .expect("there should be an action at this location");
 
-                for direction in action.conflicting_directions() {
-                    let conflict_direction = entity.location.plus(direction, &self.world.entity_grid);
-                    if self.conflicts.get(conflict_direction.coordinates()).is_conflicted() {
-                        self.outcomes.replace(entity.location.coordinates(), Some(Outcome::Blocked));
-                        break;
+                match action.conflicting_directions() {
+                    None => {}
+                    Some(directions) => for direction in directions {
+                        let conflict_direction = entity.location.plus(&direction, &self.world.entity_grid);
+                        if self.conflicts.get(conflict_direction.coordinates()).is_conflicted() {
+                            self.outcomes.replace(entity.location.coordinates(), Some(Outcome::Blocked));
+                            break;
+                        }
                     }
                 }
             }
@@ -74,44 +86,39 @@ impl WorldProcessor {
                 let action = self.actions.get(entity.location.coordinates()).as_ref()
                     .expect("there should be an action at this location");
                 if self.outcomes.get(entity.location.coordinates()).is_none() {
-                    let outcome = action.resolve(&self.world, entity);
+                    let outcome = action.resolve(entity, &self.world);
                     self.outcomes.replace(entity.location.coordinates(), Some(outcome));
                 }
             }
         }}
 
         // Apply action outcomes.
-        for space in self.outcomes.iter() { match space {
-            None => {}
-            Some(outcome) => {
-                apply_action_outcome(&mut self.world, outcome);
-            }
-        }}
+        for location in locations_to_process {
+            let outcome = self.outcomes.get(location.coordinates()).as_ref()
+                .expect("there should be an outcome at this location");
+            apply_action_outcome(outcome, &location, &mut self.world);
+        }
     }
 }
 
-fn apply_action_outcome(world: &mut World, outcome: &Outcome) {
+fn apply_action_outcome(outcome: &Outcome, location: &Location, world: &mut World) {
     match outcome {
-        Outcome::Wait { .. } => {}
-        Outcome::Move { from, direction } => {
-            resolve_move(world, *from, *direction);
-        }
-        Outcome::Turn { location, facing } => {
-            resolve_turn(world, *location, *facing);
-        }
+        Outcome::Wait => {}
+        Outcome::Move(direction) => resolve_move(location, direction, world),
+        Outcome::Turn(facing) => resolve_turn(location, facing, world),
         Outcome::Blocked => {}
     }
 }
 
-fn resolve_move(world: &mut World, location: Location, direction: Direction) {
+fn resolve_move(location: &Location, direction: &Direction, world: &mut World) {
     let mut entity = world.remove_entity(location).expect("entity should be at this location");
-    entity.location = location.plus(direction, &world.entity_grid);
+    entity.location = location.plus(&direction, &world.entity_grid);
     world.place_entity(entity).expect("this location should be unoccupied");
 }
 
-fn resolve_turn(world: &mut World, location: Location, facing: Direction) {
+fn resolve_turn(location: &Location, facing: &Direction, world: &mut World) {
     let mut entity = world.remove_entity(location).expect("entity should be at this location");
-    entity.facing = facing;
+    entity.facing = *facing;
     world.place_entity(entity).expect("this location should be unoccupied");
 }
 
@@ -133,7 +140,7 @@ impl Conflict {
         Conflict::default()
     }
 
-    fn add_from(&mut self, direction: Direction) {
+    fn add_from(&mut self, direction: &Direction) {
         match direction {
             Direction::North        => self.south = true,
             Direction::Northeast    => self.southwest = true,

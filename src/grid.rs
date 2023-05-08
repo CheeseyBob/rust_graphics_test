@@ -131,7 +131,7 @@ impl Location {
     }
 
     // TODO - Move this to Location impl.
-    pub fn plus<T>(&self, direction: Direction, grid: &Grid<T>) -> Location {
+    pub fn plus<T>(&self, direction: &Direction, grid: &Grid<T>) -> Location {
         Location {
             x: grid.width.wrapping_add_signed(direction.x() as isize).add(self.x) % grid.width,
             y: grid.height.wrapping_add_signed(direction.y() as isize).add(self.y) % grid.height,

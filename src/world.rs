@@ -21,9 +21,9 @@ impl Entity {
 
     pub fn determine_action(&self, world: &World, rng: &mut RngBuffer) -> Action {
         match rng.next() {
-            roll if roll < 0.05 => Action::turn(self.location, Direction::random(rng)),
-            roll if roll < 0.95 => Action::move_in_direction(self.location, self.facing),
-            _ => Action::wait(self.location),
+            roll if roll < 0.05 => Action::Turn(Direction::random(rng)),
+            roll if roll < 0.95 => Action::Move(self.facing),
+            _ => Action::Wait,
         }
     }
 
@@ -35,62 +35,39 @@ impl Entity {
 }
 
 pub enum Action {
-    Wait {
-        location: Location
-    },
-    Move {
-        from: Location,
-        direction: Direction,
-    },
-    Turn {
-        location: Location,
-        facing: Direction,
-    },
+    Wait,
+    Move(Direction),
+    Turn(Direction),
 }
 
 pub enum Outcome {
     Blocked,
-    Wait { location: Location },
-    Move { from: Location, direction: Direction },
-    Turn { location: Location, facing: Direction },
+    Wait,
+    Move(Direction),
+    Turn(Direction),
 }
 
 impl Action {
-    pub fn conflicting_directions(&self) -> Vec<Direction> {
+    pub fn conflicting_directions(&self) -> Option<Vec<Direction>> {
         match self {
-            Action::Wait { .. } => vec![],
-            Action::Move { from: _, direction } => vec![*direction],
-            Action::Turn { .. } => vec![],
+            Action::Wait => None,
+            Action::Move(direction) => Some(vec![*direction]),
+            Action::Turn(_) => None,
         }
     }
 
-    pub fn resolve(&self, world: &World, entity: &Entity) -> Outcome {
+    pub fn resolve(&self, entity: &Entity, world: &World) -> Outcome {
         match self {
-            Action::Wait { location } => Outcome::Wait { location: *location },
-            Action::Move { from, direction } => {
-                let target_location = entity.location.plus(*direction, &world.entity_grid);
-                match world.get_entity(target_location) {
+            Action::Wait => Outcome::Wait,
+            Action::Move(direction) => {
+                let target_location = entity.location.plus(direction, &world.entity_grid);
+                match world.get_entity(&target_location) {
                     Some(_) => Outcome::Blocked,
-                    None => Outcome::Move { from: *from, direction: *direction },
+                    None => Outcome::Move(*direction),
                 }
             }
-            Action::Turn { location, facing } => Outcome::Turn { location: *location, facing: *facing },
+            Action::Turn(facing) => Outcome::Turn(*facing),
         }
-    }
-
-    fn move_in_direction(location: Location, direction: Direction) -> Action {
-        Action::Move {
-            from: location,
-            direction,
-        }
-    }
-
-    fn turn(location: Location, facing: Direction) -> Action {
-        Action::Turn { location, facing }
-    }
-
-    fn wait(location: Location) -> Action {
-        Action::Wait { location }
     }
 }
 
@@ -135,12 +112,12 @@ impl World {
         }
     }
 
-    pub fn get_entity(&self, location: Location) -> Option<&Entity> {
+    pub fn get_entity(&self, location: &Location) -> Option<&Entity> {
         self.entity_grid.get(location.coordinates()).as_ref()
     }
 
     pub fn place_entity(&mut self, entity: Entity) -> Result<(), ()> {
-        match self.get_entity(entity.location) {
+        match self.get_entity(&entity.location) {
             Some(_) => Err(()),
             None => {
                 match self.entity_grid.replace(entity.location.coordinates(), Some(entity)) {
@@ -151,7 +128,7 @@ impl World {
         }
     }
 
-    pub fn remove_entity(&mut self, location: Location) -> Option<Entity> {
+    pub fn remove_entity(&mut self, location: &Location) -> Option<Entity> {
         self.entity_grid.replace(location.coordinates(), None)
     }
 }
