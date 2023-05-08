@@ -14,7 +14,7 @@ impl Entity {
 
     pub fn new(x: usize, y: usize, world: &World, rng: &mut RngBuffer) -> Entity {
         Entity {
-            location: Location::new(x, y, &world.entity_grid),
+            location: world.entity_grid.location_at(x, y),
             facing: Direction::random(rng),
         }
     }
@@ -60,7 +60,7 @@ impl Action {
         match self {
             Action::Wait => Outcome::Wait,
             Action::Move(direction) => {
-                let target_location = entity.location.plus(direction, &world.entity_grid);
+                let target_location = world.entity_grid.add(&entity.location, direction);
                 match world.get_entity(&target_location) {
                     Some(_) => Outcome::Blocked,
                     None => Outcome::Move(*direction),
@@ -74,7 +74,7 @@ impl Action {
 pub struct World {
     width: usize,
     height: usize,
-    pub(crate) entity_grid: Grid<Option<Entity>>,
+    pub entity_grid: Grid<Option<Entity>>,
 }
 
 impl World {
@@ -113,14 +113,14 @@ impl World {
     }
 
     pub fn get_entity(&self, location: &Location) -> Option<&Entity> {
-        self.entity_grid.get(location.coordinates()).as_ref()
+        self.entity_grid.get(location).as_ref()
     }
 
     pub fn place_entity(&mut self, entity: Entity) -> Result<(), ()> {
         match self.get_entity(&entity.location) {
             Some(_) => Err(()),
             None => {
-                match self.entity_grid.replace(entity.location.coordinates(), Some(entity)) {
+                match self.entity_grid.replace(&entity.location.clone(), Some(entity)) {
                     None => Ok(()),
                     Some(_) => panic!("this space should be unoccupied")
                 }
@@ -129,6 +129,6 @@ impl World {
     }
 
     pub fn remove_entity(&mut self, location: &Location) -> Option<Entity> {
-        self.entity_grid.replace(location.coordinates(), None)
+        self.entity_grid.replace(location, None)
     }
 }

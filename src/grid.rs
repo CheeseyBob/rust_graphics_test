@@ -21,32 +21,41 @@ impl<T> Grid<T> {
         }
     }
 
-    pub fn fill_with<F>(&mut self, mut f: F)
-        where F: FnMut() -> T {
+    pub fn fill_with<F: FnMut() -> T>(&mut self, mut f: F) {
         self.grid.fill_with(f);
     }
 
-    // TODO - Change to accept Location instead of coordinates.
-    pub fn get(&self, coordinates: (usize, usize)) -> &T {
-        let index = self.index(coordinates);
+    pub fn get(&self, location: &Location) -> &T {
+        let index = self.index(location);
         &self.grid[index]
     }
 
-    // TODO - Change to accept Location instead of coordinates.
-    pub fn get_mut(&mut self, coordinates: (usize, usize)) -> &mut T {
-        let index = self.index(coordinates);
+    pub fn get_mut(&mut self, location: &Location) -> &mut T {
+        let index = self.index(location);
         &mut self.grid[index]
     }
 
-    // TODO - Change to accept Location instead of coordinates.
-    pub fn replace(&mut self, coordinates: (usize, usize), value: T) -> T {
-        let index = self.index(coordinates);
+    pub fn replace(&mut self, location: &Location, value: T) -> T {
+        let index = self.index(location);
         std::mem::replace(&mut self.grid[index], value)
     }
 
-    // TODO - Change to accept Location instead of coordinates.
-    fn index(&self, coordinates: (usize, usize)) -> usize {
-        coordinates.0 + self.width * coordinates.1
+    fn index(&self, location: &Location) -> usize {
+        location.x + self.width * location.y
+    }
+
+    pub fn location_at(&self, x: usize, y: usize) -> Location {
+        Location {
+            x: x % self.width,
+            y: y % self.height,
+        }
+    }
+
+    pub fn add(&self, location: &Location, direction: &Direction) -> Location {
+        Location {
+            x: self.width.wrapping_add_signed(direction.x()).add(location.x) % self.width,
+            y: self.height.wrapping_add_signed(direction.y()).add(location.y) % self.height,
+        }
     }
 
     pub fn iter(&self) -> Iter<'_, T> {
@@ -67,29 +76,19 @@ pub enum Direction {
 }
 
 impl Direction {
-    pub fn x(&self) -> i8 {
+    pub fn x(&self) -> isize {
         match self {
-            Direction::North => 0,
-            Direction::Northeast => 1,
-            Direction::East => 1,
-            Direction::Southeast => 1,
-            Direction::South => 0,
-            Direction::Southwest => -1,
-            Direction::West => -1,
-            Direction::Northwest => -1,
+            Direction::East | Direction::Northeast | Direction::Southeast => 1,
+            Direction::West | Direction::Southwest | Direction::Northwest=> -1,
+            Direction::North | Direction::South => 0,
         }
     }
 
-    pub fn y(&self) -> i8 {
+    pub fn y(&self) -> isize {
         match self {
-            Direction::North => -1,
-            Direction::Northeast => -1,
-            Direction::East => 0,
-            Direction::Southeast => 1,
-            Direction::South => 1,
-            Direction::Southwest => 1,
-            Direction::West => 0,
-            Direction::Northwest => -1,
+            Direction::South | Direction::Southeast | Direction::Southwest => 1,
+            Direction::North | Direction::Northeast | Direction::Northwest => -1,
+            Direction::East | Direction::West => 0,
         }
     }
 
@@ -117,24 +116,4 @@ pub struct Location {
 impl Location {
     getter!(x: usize);
     getter!(y: usize);
-
-    // TODO - Move this to Location impl.
-    pub fn new<T>(x: usize, y: usize, grid: &Grid<T>) -> Location {
-        Location {
-            x: x % grid.width,
-            y: y % grid.height,
-        }
-    }
-
-    pub fn coordinates(&self) -> (usize, usize) {
-        (self.x, self.y)
-    }
-
-    // TODO - Move this to Location impl.
-    pub fn plus<T>(&self, direction: &Direction, grid: &Grid<T>) -> Location {
-        Location {
-            x: grid.width.wrapping_add_signed(direction.x() as isize).add(self.x) % grid.width,
-            y: grid.height.wrapping_add_signed(direction.y() as isize).add(self.y) % grid.height,
-        }
-    }
 }

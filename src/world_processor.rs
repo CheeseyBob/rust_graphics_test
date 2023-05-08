@@ -35,7 +35,7 @@ impl WorldProcessor {
             None => {}
             Some(entity) => {
                 let action = entity.determine_action(&self.world, rng);
-                self.actions.replace(entity.location.coordinates(), Some(action));
+                self.actions.replace(&entity.location.clone(), Some(action));
             }
         }}
 
@@ -45,14 +45,14 @@ impl WorldProcessor {
             None => {}
             Some(entity) => {
                 let location = entity.location;
-                let action = self.actions.get(location.coordinates()).as_ref()
+                let action = self.actions.get(&location).as_ref()
                     .expect("there should be an action at this location");
 
                 match action.conflicting_directions() {
                     None => {}
                     Some(directions) => for direction in directions {
-                        let conflict_location = location.plus(&direction, &self.world.entity_grid);
-                        self.conflicts.get_mut(conflict_location.coordinates()).add_from(&direction);
+                        let conflict_location = self.world.entity_grid.add(&location, &direction);
+                        self.conflicts.get_mut(&conflict_location).add_from(&direction);
                     }
                 }
             }
@@ -63,15 +63,15 @@ impl WorldProcessor {
         for space in self.world.entity_grid.iter() { match space {
             None => {}
             Some(entity) => {
-                let action = self.actions.get(entity.location.coordinates()).as_ref()
+                let action = self.actions.get(&entity.location).as_ref()
                     .expect("there should be an action at this location");
 
                 match action.conflicting_directions() {
                     None => {}
                     Some(directions) => for direction in directions {
-                        let conflict_direction = entity.location.plus(&direction, &self.world.entity_grid);
-                        if self.conflicts.get(conflict_direction.coordinates()).is_conflicted() {
-                            self.outcomes.replace(entity.location.coordinates(), Some(Outcome::Blocked));
+                        let conflict_direction = self.world.entity_grid.add(&entity.location, &direction);
+                        if self.conflicts.get(&conflict_direction).is_conflicted() {
+                            self.outcomes.replace(&entity.location, Some(Outcome::Blocked));
                             break;
                         }
                     }
@@ -83,18 +83,18 @@ impl WorldProcessor {
         for space in self.world.entity_grid.iter() { match space {
             None => {}
             Some(entity) => {
-                let action = self.actions.get(entity.location.coordinates()).as_ref()
+                let action = self.actions.get(&entity.location).as_ref()
                     .expect("there should be an action at this location");
-                if self.outcomes.get(entity.location.coordinates()).is_none() {
+                if self.outcomes.get(&entity.location).is_none() {
                     let outcome = action.resolve(entity, &self.world);
-                    self.outcomes.replace(entity.location.coordinates(), Some(outcome));
+                    self.outcomes.replace(&entity.location, Some(outcome));
                 }
             }
         }}
 
         // Apply action outcomes.
         for location in locations_to_process {
-            let outcome = self.outcomes.get(location.coordinates()).as_ref()
+            let outcome = self.outcomes.get(&location).as_ref()
                 .expect("there should be an outcome at this location");
             apply_action_outcome(outcome, &location, &mut self.world);
         }
@@ -112,7 +112,7 @@ fn apply_action_outcome(outcome: &Outcome, location: &Location, world: &mut Worl
 
 fn resolve_move(location: &Location, direction: &Direction, world: &mut World) {
     let mut entity = world.remove_entity(location).expect("entity should be at this location");
-    entity.location = location.plus(&direction, &world.entity_grid);
+    entity.location = world.entity_grid.add(&location, &direction);
     world.place_entity(entity).expect("this location should be unoccupied");
 }
 
