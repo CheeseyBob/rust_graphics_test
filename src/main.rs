@@ -1,9 +1,33 @@
+/// Defines a lambda function.
+///
+/// `f!{x -> y}` outputs: `|x| y`
+macro_rules! f {
+    {$var:ident -> $def:expr} => {
+        |$var| $def
+    };
+}
+
+/// Creates a public getter function for given (Copy) field.
+macro_rules! getter {
+    ($var:ident: $t:ty) => {
+        pub fn $var(&self) -> $t { self.$var }
+    };
+}
+
+/// Creates a public reference-getter function for given field.
+macro_rules! getter_ref {
+    ($var:ident: $typ:ty) => {
+        pub fn $var(&self) -> &$typ { &self.$var }
+    };
+}
+
 mod graphics_window;
 mod rng_buffer;
 mod matrix_test;
 mod world;
 mod fps_counter;
 mod grid;
+mod world_processor;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
@@ -14,6 +38,7 @@ use crate::fps_counter::FpsCounter;
 use crate::graphics_window::{GraphicsWindow, WindowConfig};
 use crate::rng_buffer::RngBuffer;
 use crate::world::World;
+use crate::world_processor::WorldProcessor;
 
 fn main() {
     let target_fps = 1000;
@@ -26,6 +51,8 @@ fn main() {
 
     let mut world = World::new(800, 600);
     world.load(&mut rng);
+
+    let mut world_processor = WorldProcessor::new(world);
 
     /*
     match matrix_test::run() {
@@ -56,8 +83,8 @@ fn main() {
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
                 fps_counter.tick();
-                world::step(&mut world, &mut rng);
-                world.draw(&mut graphics_window.get_graphics());
+                world_processor.step(&mut rng);
+                world_processor.world().draw(&mut graphics_window.get_graphics());
                 graphics_window.get_window().request_redraw();
             }
             EventResponse::None => {}

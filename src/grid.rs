@@ -9,8 +9,8 @@ pub struct Grid<T> {
 }
 
 impl<T> Grid<T> {
-    pub fn height(&self) -> usize { self.height }
-    pub fn width(&self) -> usize { self.width }
+    getter!(width: usize);
+    getter!(height: usize);
 
     pub fn new_filled_with<F>(mut f: F, width: usize, height: usize) -> Grid<T>
         where F: FnMut() -> T {
@@ -26,21 +26,25 @@ impl<T> Grid<T> {
         self.grid.fill_with(f);
     }
 
+    // TODO - Change to accept Location instead of coordinates.
     pub fn get(&self, coordinates: (usize, usize)) -> &T {
         let index = self.index(coordinates);
         &self.grid[index]
     }
 
+    // TODO - Change to accept Location instead of coordinates.
     pub fn get_mut(&mut self, coordinates: (usize, usize)) -> &mut T {
         let index = self.index(coordinates);
         &mut self.grid[index]
     }
 
+    // TODO - Change to accept Location instead of coordinates.
     pub fn replace(&mut self, coordinates: (usize, usize), value: T) -> T {
         let index = self.index(coordinates);
         std::mem::replace(&mut self.grid[index], value)
     }
 
+    // TODO - Change to accept Location instead of coordinates.
     fn index(&self, coordinates: (usize, usize)) -> usize {
         coordinates.0 + self.width * coordinates.1
     }
@@ -109,12 +113,12 @@ pub struct Location {
     x: usize,
     y: usize
 }
-impl Location {
-    pub fn x(&self) -> usize { self.x }
-    pub fn y(&self) -> usize { self.y }
-}
 
 impl Location {
+    getter!(x: usize);
+    getter!(y: usize);
+
+    // TODO - Move this to Location impl.
     pub fn new<T>(x: usize, y: usize, grid: &Grid<T>) -> Location {
         Location {
             x: x % grid.width,
@@ -126,6 +130,7 @@ impl Location {
         (self.x, self.y)
     }
 
+    // TODO - Move this to Location impl.
     pub fn plus<T>(&self, direction: Direction, grid: &Grid<T>) -> Location {
         Location {
             x: grid.width.wrapping_add_signed(direction.x() as isize).add(self.x) % grid.width,
