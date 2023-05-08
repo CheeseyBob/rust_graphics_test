@@ -1,9 +1,11 @@
 use crate::grid::{Direction, Grid, Location};
 use crate::rng_buffer::RngBuffer;
-use crate::world::{Action, Entity, Outcome, World};
+use crate::world::{World};
+use crate::world::action::{Action, Outcome};
 
 pub struct WorldProcessor {
     world: World,
+    locations: Vec<Location>,
     actions: Grid<Option<Action>>,
     conflicts: Grid<Conflict>,
     outcomes: Grid<Option<Outcome>>,
@@ -14,6 +16,7 @@ impl WorldProcessor {
 
     pub fn new(world: World) -> WorldProcessor {
         WorldProcessor {
+            locations: Vec::with_capacity(world.width() * world.height()),
             actions: Grid::new_filled_with(|| None, world.width(), world.height()),
             conflicts: Grid::new_filled_with(Conflict::none, world.width(), world.height()),
             outcomes: Grid::new_filled_with(|| None, world.width(), world.height()),
@@ -23,50 +26,37 @@ impl WorldProcessor {
 
     pub fn step(&mut self, rng: &mut RngBuffer) {
 
-        // This is temporary - World should be updated to track entities in both a Vec and Grid simultaneously.
-        let locations_to_process: Vec<Location> = self.world.entity_grid.iter()
-            .filter_map(f!{opt -> opt.as_ref()})
-            .map(f!{entity -> entity.location})
-            .collect();
-        let total_locations_to_process = locations_to_process.len();
-
-
-        // Determine entity actions.
-        for i in 0..total_locations_to_process {
-            let location = &locations_to_process[i];
-            let entity = self.world.get_entity(&location)
-                .expect("there should be an entity here");
+        for entity in self.world.iter_entities() {
+            self.locations.push(entity.location);
             let action = entity.determine_action(&self.world, rng);
             self.actions.replace(&entity.location.clone(), Some(action));
         }
 
         // Find conflicting actions.
-        for i in 0..total_locations_to_process {
-            let location = &locations_to_process[i];
-            let action = self.actions.get(&location).as_ref()
+        for location in &self.locations {
+            let action = self.actions.get(location).as_ref()
                 .expect("there should be an action at this location");
 
             match action.conflicting_directions() {
                 None => {}
                 Some(directions) => for direction in directions {
-                    let conflict_location = self.world.entity_grid.add(&location, &direction);
+                    let conflict_location = self.world.add(&location, &direction);
                     self.conflicts.get_mut(&conflict_location).add_from(&direction);
                 }
             }
         }
 
         // Resolve conflicts.
-        for i in 0..total_locations_to_process {
-            let location = &locations_to_process[i];
-            let action = self.actions.get(&location).as_ref()
+        for location in &self.locations {
+            let action = self.actions.get(location).as_ref()
                 .expect("there should be an action at this location");
 
             match action.conflicting_directions() {
                 None => {}
-                Some(directions) => for direction in directions {
-                    let conflict_direction = self.world.entity_grid.add(&location, &direction);
+                Some(directions) => for direction in &directions {
+                    let conflict_direction = self.world.add(location, direction);
                     if self.conflicts.get(&conflict_direction).is_conflicted() {
-                        self.outcomes.replace(&location, Some(Outcome::Blocked));
+                        self.outcomes.replace(location, Some(Outcome::Blocked));
                         break;
                     }
                 }
@@ -74,8 +64,7 @@ impl WorldProcessor {
         }
 
         // Resolve actions.
-        for i in 0..total_locations_to_process {
-            let location = &locations_to_process[i];
+        for location in &self.locations {
             let entity = self.world.get_entity(location)
                 .expect("entity should be at this location");
             let action = self.actions.get(location).as_ref()
@@ -88,20 +77,19 @@ impl WorldProcessor {
         }
 
         // Apply action outcomes.
-        for i in 0..total_locations_to_process {
-            let location = &locations_to_process[i];
-            let outcome = self.outcomes.get(&location).as_ref()
+        for location in &self.locations {
+            let outcome = self.outcomes.get(location).as_ref()
                 .expect("there should be an outcome at this location");
-            apply_action_outcome(outcome, &location, &mut self.world);
+            apply_action_outcome(outcome, location, &mut self.world);
         }
 
         // Clean up.
-        for i in 0..total_locations_to_process {
-            let location = &locations_to_process[i];
+        for location in &self.locations {
             self.actions.replace(location, None);
             self.conflicts.replace(location, Conflict::none());
             self.outcomes.replace(location, None);
         }
+        self.locations.clear();
     }
 }
 
@@ -115,15 +103,15 @@ fn apply_action_outcome(outcome: &Outcome, location: &Location, world: &mut Worl
 }
 
 fn resolve_move(location: &Location, direction: &Direction, world: &mut World) {
-    let mut entity = world.remove_entity(location).expect("entity should be at this location");
-    entity.location = world.entity_grid.add(&location, &direction);
-    world.place_entity(entity).expect("this location should be unoccupied");
+    world.move_entity(location, direction)
+        .expect("entity should be at location and destination should be unoccupied");
 }
 
 fn resolve_turn(location: &Location, facing: &Direction, world: &mut World) {
-    let mut entity = world.remove_entity(location).expect("entity should be at this location");
+    let mut entity = world.get_entity_mut(location)
+        .expect("entity should be at this location");
+
     entity.facing = *facing;
-    world.place_entity(entity).expect("this location should be unoccupied");
 }
 
 #[derive(Default)]

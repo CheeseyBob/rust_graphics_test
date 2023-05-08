@@ -50,7 +50,8 @@ fn main() {
     let mut rng = RngBuffer::with_capacity(1_000);
 
     let mut world = World::new(800, 600);
-    world.load(&mut rng);
+    load_test_world(&mut world, &mut rng);
+    //world.load(&mut rng);
 
     let mut world_processor = WorldProcessor::new(world);
 
@@ -111,4 +112,16 @@ fn handle_window_event(event: &WindowEvent) -> EventResponse {
 
 enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
+}
+
+fn load_test_world(world: &mut World, rng: &mut RngBuffer) {
+    let mut count = 0;
+    while count < 5_000 {
+        let x = (rng.generate_next() * world.width() as f64) as usize;
+        let y = (rng.next() * world.height() as f64) as usize;
+        let entity = world::entity::Entity::new(x, y, &world, rng);
+        if world.place_entity(entity).is_ok() {
+            count += 1;
+        }
+    }
 }
