@@ -107,6 +107,7 @@ impl Direction {
     }
 }
 
+// TODO - Try refactoring Location to store the buffer index instead of / as well as the coordinates.
 #[derive(Copy, Clone, Debug)]
 pub struct Location {
     x: usize,

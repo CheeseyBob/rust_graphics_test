@@ -28,75 +28,79 @@ impl WorldProcessor {
             .filter_map(f!{opt -> opt.as_ref()})
             .map(f!{entity -> entity.location})
             .collect();
+        let total_locations_to_process = locations_to_process.len();
+
 
         // Determine entity actions.
-        self.actions.fill_with(|| None);
-        for space in self.world.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let action = entity.determine_action(&self.world, rng);
-                self.actions.replace(&entity.location.clone(), Some(action));
-            }
-        }}
+        for i in 0..total_locations_to_process {
+            let location = &locations_to_process[i];
+            let entity = self.world.get_entity(&location)
+                .expect("there should be an entity here");
+            let action = entity.determine_action(&self.world, rng);
+            self.actions.replace(&entity.location.clone(), Some(action));
+        }
 
         // Find conflicting actions.
-        self.conflicts.fill_with(Conflict::none);
-        for space in self.world.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let location = entity.location;
-                let action = self.actions.get(&location).as_ref()
-                    .expect("there should be an action at this location");
+        for i in 0..total_locations_to_process {
+            let location = &locations_to_process[i];
+            let action = self.actions.get(&location).as_ref()
+                .expect("there should be an action at this location");
 
-                match action.conflicting_directions() {
-                    None => {}
-                    Some(directions) => for direction in directions {
-                        let conflict_location = self.world.entity_grid.add(&location, &direction);
-                        self.conflicts.get_mut(&conflict_location).add_from(&direction);
-                    }
+            match action.conflicting_directions() {
+                None => {}
+                Some(directions) => for direction in directions {
+                    let conflict_location = self.world.entity_grid.add(&location, &direction);
+                    self.conflicts.get_mut(&conflict_location).add_from(&direction);
                 }
             }
-        }}
+        }
 
         // Resolve conflicts.
-        self.outcomes.fill_with(|| None);
-        for space in self.world.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let action = self.actions.get(&entity.location).as_ref()
-                    .expect("there should be an action at this location");
+        for i in 0..total_locations_to_process {
+            let location = &locations_to_process[i];
+            let action = self.actions.get(&location).as_ref()
+                .expect("there should be an action at this location");
 
-                match action.conflicting_directions() {
-                    None => {}
-                    Some(directions) => for direction in directions {
-                        let conflict_direction = self.world.entity_grid.add(&entity.location, &direction);
-                        if self.conflicts.get(&conflict_direction).is_conflicted() {
-                            self.outcomes.replace(&entity.location, Some(Outcome::Blocked));
-                            break;
-                        }
+            match action.conflicting_directions() {
+                None => {}
+                Some(directions) => for direction in directions {
+                    let conflict_direction = self.world.entity_grid.add(&location, &direction);
+                    if self.conflicts.get(&conflict_direction).is_conflicted() {
+                        self.outcomes.replace(&location, Some(Outcome::Blocked));
+                        break;
                     }
                 }
             }
-        }}
+        }
 
         // Resolve actions.
-        for space in self.world.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let action = self.actions.get(&entity.location).as_ref()
-                    .expect("there should be an action at this location");
-                if self.outcomes.get(&entity.location).is_none() {
-                    let outcome = action.resolve(entity, &self.world);
-                    self.outcomes.replace(&entity.location, Some(outcome));
-                }
+        for i in 0..total_locations_to_process {
+            let location = &locations_to_process[i];
+            let entity = self.world.get_entity(location)
+                .expect("entity should be at this location");
+            let action = self.actions.get(location).as_ref()
+                .expect("there should be an action at this location");
+
+            if self.outcomes.get(location).is_none() {
+                let outcome = action.resolve(entity, &self.world);
+                self.outcomes.replace(location, Some(outcome));
             }
-        }}
+        }
 
         // Apply action outcomes.
-        for location in locations_to_process {
+        for i in 0..total_locations_to_process {
+            let location = &locations_to_process[i];
             let outcome = self.outcomes.get(&location).as_ref()
                 .expect("there should be an outcome at this location");
             apply_action_outcome(outcome, &location, &mut self.world);
+        }
+
+        // Clean up.
+        for i in 0..total_locations_to_process {
+            let location = &locations_to_process[i];
+            self.actions.replace(location, None);
+            self.conflicts.replace(location, Conflict::none());
+            self.outcomes.replace(location, None);
         }
     }
 }
