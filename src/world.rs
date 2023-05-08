@@ -6,7 +6,7 @@ use crate::world::location::{Direction, Location};
 mod location {
     use std::ops::Add;
     use crate::rng_buffer::RngBuffer;
-    use crate::world::World;
+    use crate::world::{Grid, World};
 
     #[derive(Copy, Clone)]
     pub enum Direction {
@@ -70,10 +70,10 @@ mod location {
             (self.x, self.y)
         }
 
-        pub fn plus(&self, direction: Direction, world: &World) -> Location {
+        pub fn plus<T>(&self, direction: Direction, grid: &Grid<T>) -> Location {
             Location {
-                x: world.width.wrapping_add_signed(direction.x() as isize).add(self.x) % world.width,
-                y: world.height.wrapping_add_signed(direction.y() as isize).add(self.y) % world.height,
+                x: grid.width.wrapping_add_signed(direction.x() as isize).add(self.x) % grid.width,
+                y: grid.height.wrapping_add_signed(direction.y() as isize).add(self.y) % grid.height,
             }
         }
 
@@ -147,8 +147,8 @@ impl Action {
         match self {
             Action::Wait { location } => Outcome::Wait { location: *location },
             Action::Move { from, direction } => {
-                let target_location = entity.location.plus(*direction, world);
-                match world.get_entity(target_location) {
+                let target_location = entity.location.plus(*direction, &world.entity_grid);
+                match get_entity(&world.entity_grid, target_location) {
                     Some(_) => Outcome::Blocked,
                     None => Outcome::Move { from: *from, direction: *direction },
                 }
@@ -180,16 +180,63 @@ enum Outcome {
     Turn { location: Location, facing: Direction },
 }
 
-pub struct World {
-    entity_grid: Vec<Option<Entity>>,
+
+
+pub struct Grid<T> {
     width: usize,
     height: usize,
+    grid: Vec<T>,
+}
+
+impl<T> Grid<T> {
+    pub fn new_filled_using<F>(mut f: F, width: usize, height: usize) -> Grid<T>
+        where F: FnMut() -> T {
+        Grid {
+            grid: init_vec_with(f, width * height),
+            width,
+            height,
+        }
+    }
+
+    pub fn get(&self, coordinates: (usize, usize)) -> &T {
+        &self.grid[self.index(coordinates)]
+    }
+
+    pub fn replace(&mut self, coordinates: (usize, usize), value: T) -> T {
+        let index = self.index(coordinates);
+        std::mem::replace(&mut self.grid[index], value)
+    }
+
+    fn index(&self, coordinates: (usize, usize)) -> usize {
+        coordinates.0 + self.width * coordinates.1
+    }
+}
+
+fn init_vec_with<T, F>(mut f: F, capacity: usize) -> Vec<T>
+    where F: FnMut() -> T {
+    let mut vec: Vec<T> = Vec::with_capacity(capacity);
+    vec.resize_with(capacity, f);
+    return vec;
+}
+
+
+
+pub struct World {
+    width: usize,
+    height: usize,
+    entity_grid: Grid<Option<Entity>>,
+    actions: Grid<Option<Action>>,
+    conflicts: Grid<Conflict>,
+    outcomes: Grid<Option<Outcome>>,
 }
 
 impl World {
     pub fn new(width: usize, height: usize) -> World {
         World {
-            entity_grid: init_vec_with(|| None,width * height),
+            entity_grid: Grid::new_filled_using(|| None, width, height),
+            actions: Grid::new_filled_using(|| None, width, height),
+            conflicts: Grid::new_filled_using(Conflict::none, width,  height),
+            outcomes: Grid::new_filled_using(|| None, width, height),
             width,
             height,
         }
@@ -198,7 +245,7 @@ impl World {
     pub fn draw(&self, graphics: &mut GraphicsBuffer) {
         graphics.clear(Color::BLACK);
 
-        for space in &self.entity_grid {
+        for space in &self.entity_grid.grid {
             match space {
                 Some(entity) => entity.draw(graphics),
                 None => {}
@@ -212,7 +259,7 @@ impl World {
             let x = (rng.generate_next() * self.width as f64) as usize;
             let y = (rng.next() * self.height as f64) as usize;
             let entity = Entity::new(x, y, &self, rng);
-            if self.place_entity(entity).is_ok() {
+            if place_entity(&mut self.entity_grid, entity).is_ok() {
                 count += 1;
             }
         }
@@ -222,59 +269,69 @@ impl World {
         let space_count = self.width * self.height;
 
         // Determine entity actions.
-        let mut actions: Vec<Option<Action>> = init_vec_with(|| None, space_count);
+        self.actions.grid.fill_with(|| None);
         for i in 0..space_count {
-            actions[i] = match &self.entity_grid[i] {
+            self.actions.grid[i] = match &self.entity_grid.grid[i] {
                 Some(entity) => Some(entity.determine_action(&self, rng)),
                 None => None,
             };
         }
 
         // Find conflicting actions.
-        let mut conflicts: Vec<Conflict> = init_vec_with(Conflict::none, space_count);
+        self.conflicts.grid.fill_with(Conflict::none);
         for x in 0..self.width {
             for y in 0..self.height {
-                match &actions[x + y * self.width] {
+                match &self.actions.grid[x + y * self.width] {
                     None => {}
                     Some(action) => {
                         let conflict = action.conflicts();
                         let location = Location::new(x, y, &self);
 
-                        let north = location.plus(Direction::North, &self);
-                        let northeast = location.plus(Direction::Northeast, &self);
-                        let east = location.plus(Direction::East, &self);
-                        let southeast = location.plus(Direction::Southeast, &self);
-                        let south = location.plus(Direction::South, &self);
-                        let southwest = location.plus(Direction::Southwest, &self);
-                        let west = location.plus(Direction::West, &self);
-                        let northwest = location.plus(Direction::Northwest, &self);
+                        let north = location.plus(Direction::North, &self.entity_grid);
+                        let northeast = location.plus(Direction::Northeast, &self.entity_grid);
+                        let east = location.plus(Direction::East, &self.entity_grid);
+                        let southeast = location.plus(Direction::Southeast, &self.entity_grid);
+                        let south = location.plus(Direction::South, &self.entity_grid);
+                        let southwest = location.plus(Direction::Southwest, &self.entity_grid);
+                        let west = location.plus(Direction::West, &self.entity_grid);
+                        let northwest = location.plus(Direction::Northwest, &self.entity_grid);
 
-                        conflicts[self.buffer_index(north)].south = conflict.north;
-                        conflicts[self.buffer_index(northeast)].southwest = conflict.northeast;
-                        conflicts[self.buffer_index(east)].west = conflict.east;
-                        conflicts[self.buffer_index(southeast)].northwest = conflict.southeast;
-                        conflicts[self.buffer_index(south)].north = conflict.south;
-                        conflicts[self.buffer_index(southwest)].northeast = conflict.southwest;
-                        conflicts[self.buffer_index(west)].east = conflict.west;
-                        conflicts[self.buffer_index(northwest)].southeast = conflict.northwest;
+                        let north = self.buffer_index(north);
+                        let northeast = self.buffer_index(northeast);
+                        let east = self.buffer_index(east);
+                        let southeast = self.buffer_index(southeast);
+                        let south = self.buffer_index(south);
+                        let southwest = self.buffer_index(southwest);
+                        let west = self.buffer_index(west);
+                        let northwest = self.buffer_index(northwest);
+
+                        self.conflicts.grid[north].south = conflict.north;
+                        self.conflicts.grid[northeast].southwest = conflict.northeast;
+                        self.conflicts.grid[east].west = conflict.east;
+                        self.conflicts.grid[southeast].northwest = conflict.southeast;
+                        self.conflicts.grid[south].north = conflict.south;
+                        self.conflicts.grid[southwest].northeast = conflict.southwest;
+                        self.conflicts.grid[west].east = conflict.west;
+                        self.conflicts.grid[northwest].southeast = conflict.northwest;
+
                     }
                 }
             }
         }
 
         // Resolve conflicts.
-        let mut outcomes: Vec<Option<Outcome>> = init_vec_with(|| None, space_count);
+        self.outcomes.grid.fill_with(|| None);
         for x in 0..self.width {
             for y in 0..self.height {
-                match &actions[x + y * self.width] {
+                match &self.actions.grid[x + y * self.width] {
                     None => {}
                     Some(action) => {
                         let location = Location::new(x, y, &self);
                         for direction in action.conflicts().directions() {
-                            let conflict_direction = location.plus(direction, &self);
+                            let conflict_direction = location.plus(direction, &self.entity_grid);
                             let index = self.buffer_index(conflict_direction);
-                            if conflicts[index].is_conflicted() {
-                                outcomes[x + y * self.width] = Some(Outcome::Blocked);
+                            if self.conflicts.grid[index].is_conflicted() {
+                                self.outcomes.grid[x + y * self.width] = Some(Outcome::Blocked);
                                 continue;
                             }
                         }
@@ -285,13 +342,13 @@ impl World {
 
         // Resolve actions.
         for i in 0..space_count {
-            if outcomes[i].is_some() {
+            if self.outcomes.grid[i].is_some() {
                 continue;
             }
-            outcomes[i] = match &actions[i] {
+            self.outcomes.grid[i] = match &self.actions.grid[i] {
                 None => None,
                 Some(action) => {
-                    let entity = self.entity_grid[i].as_ref().expect("entity should be at this location");
+                    let entity = self.entity_grid.grid[i].as_ref().expect("entity should be at this location");
                     Some(action.resolve(&self, entity))
                 },
             }
@@ -299,64 +356,61 @@ impl World {
 
         // Apply action outcomes.
         for i in 0..space_count {
-            match &outcomes[i] {
+            match &self.outcomes.grid[i] {
                 None => {}
-                Some(outcome) => self.apply_action_outcome(outcome, rng),
+                Some(outcome) => apply_action_outcome(&mut self.entity_grid, outcome),
             }
         }
-    }
-
-    fn apply_action_outcome(&mut self, outcome: &Outcome, rng: &mut RngBuffer) {
-        match outcome {
-            Outcome::Wait { .. } => {}
-            Outcome::Move { from, direction } => {
-                self.resolve_move(*from, *direction, rng);
-            }
-            Outcome::Turn { location, facing } => {
-                self.resolve_turn(*location, *facing, rng);
-            }
-            Outcome::Blocked => {}
-        }
-    }
-
-    fn resolve_move(&mut self, location: Location, direction: Direction, rng: &mut RngBuffer) {
-        let mut entity = self.remove_entity(location).expect("entity should be at this location");
-        entity.set_location(location.plus(direction, &self));
-        self.place_entity(entity).expect("this location should be unoccupied");
-    }
-
-    fn resolve_turn(&mut self, location: Location, facing: Direction, rng: &mut RngBuffer) {
-        let mut entity = self.remove_entity(location).expect("entity should be at this location");
-        entity.facing = facing;
-        self.place_entity(entity).expect("this location should be unoccupied");
-    }
-
-    fn is_occupied(&self, location: Location) -> bool {
-        self.get_entity(location).is_some()
-    }
-
-    fn get_entity(&self, location: Location) -> Option<&Entity> {
-        self.entity_grid[self.buffer_index(location)].as_ref()
-    }
-
-    fn remove_entity(&mut self, location: Location) -> Option<Entity> {
-        let index = self.buffer_index(location);
-        let entity = std::mem::replace(&mut self.entity_grid[index], None);
-        return entity;
-    }
-
-    fn place_entity(&mut self, entity: Entity) -> Result<(), ()> {
-        if self.is_occupied(entity.location) {
-            return Err(());
-        }
-        let insert_index = self.buffer_index(entity.location);
-        self.entity_grid[insert_index] = Some(entity);
-        return Ok(());
     }
 
     fn buffer_index(&self, location: Location) -> usize {
         location.x() + self.width * location.y()
     }
+}
+
+fn apply_action_outcome(entity_grid: &mut Grid<Option<Entity>>, outcome: &Outcome) {
+    match outcome {
+        Outcome::Wait { .. } => {}
+        Outcome::Move { from, direction } => {
+            resolve_move(entity_grid, *from, *direction);
+        }
+        Outcome::Turn { location, facing } => {
+            resolve_turn(entity_grid, *location, *facing);
+        }
+        Outcome::Blocked => {}
+    }
+}
+
+fn resolve_move(entity_grid: &mut Grid<Option<Entity>>, location: Location, direction: Direction) {
+    let mut entity = remove_entity(entity_grid, location).expect("entity should be at this location");
+    entity.set_location(location.plus(direction, entity_grid));
+    place_entity(entity_grid, entity).expect("this location should be unoccupied");
+}
+
+fn resolve_turn(entity_grid: &mut Grid<Option<Entity>>, location: Location, facing: Direction) {
+    let mut entity = remove_entity(entity_grid, location).expect("entity should be at this location");
+    entity.facing = facing;
+    place_entity(entity_grid, entity).expect("this location should be unoccupied");
+}
+
+fn get_entity(entity_grid: &Grid<Option<Entity>>, location: Location) -> Option<&Entity> {
+    entity_grid.get(location.coordinates()).as_ref()
+}
+
+fn place_entity(entity_grid: &mut Grid<Option<Entity>>, entity: Entity) -> Result<(), ()> {
+    match get_entity(entity_grid, entity.location) {
+        Some(_) => Err(()),
+        None => {
+            match entity_grid.replace(entity.location.coordinates(), Some(entity)) {
+                None => Ok(()),
+                Some(_) => panic!("this space should be unoccupied")
+            }
+        }
+    }
+}
+
+fn remove_entity(entity_grid: &mut Grid<Option<Entity>>, location: Location) -> Option<Entity> {
+    entity_grid.replace(location.coordinates(), None)
 }
 
 
@@ -425,11 +479,4 @@ impl Conflict {
         count += self.northwest as usize;
         return count > 1;
     }
-}
-
-fn init_vec_with<T, F>(mut f: F, capacity: usize) -> Vec<T>
-    where F: FnMut() -> T {
-    let mut vec: Vec<T> = Vec::with_capacity(capacity);
-    vec.resize_with(capacity, f);
-    return vec;
 }
