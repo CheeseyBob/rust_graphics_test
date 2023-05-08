@@ -1,146 +1,6 @@
 use crate::graphics_window::{Color, GraphicsBuffer};
 use crate::rng_buffer::RngBuffer;
-use crate::world::grid::{Direction, Grid, Location};
-
-
-mod grid {
-    use std::ops::Add;
-    use std::slice::Iter;
-    use crate::rng_buffer::RngBuffer;
-
-    pub struct Grid<T> {
-        width: usize,
-        height: usize,
-        grid: Vec<T>,
-    }
-
-    impl<T> Grid<T> {
-        pub fn height(&self) -> usize { self.height }
-        pub fn width(&self) -> usize { self.width }
-
-        pub fn new_filled_with<F>(mut f: F, width: usize, height: usize) -> Grid<T>
-            where F: FnMut() -> T {
-            Grid {
-                grid: init_vec_with(f, width * height),
-                width,
-                height,
-            }
-        }
-
-        pub fn fill_with<F>(&mut self, mut f: F)
-            where F: FnMut() -> T {
-            self.grid.fill_with(f);
-        }
-
-        pub fn get(&self, coordinates: (usize, usize)) -> &T {
-            let index = self.index(coordinates);
-            &self.grid[index]
-        }
-
-        pub fn get_mut(&mut self, coordinates: (usize, usize)) -> &mut T {
-            let index = self.index(coordinates);
-            &mut self.grid[index]
-        }
-
-        pub fn replace(&mut self, coordinates: (usize, usize), value: T) -> T {
-            let index = self.index(coordinates);
-            std::mem::replace(&mut self.grid[index], value)
-        }
-
-        fn index(&self, coordinates: (usize, usize)) -> usize {
-            coordinates.0 + self.width * coordinates.1
-        }
-
-        pub fn iter(&self) -> Iter<'_, T> {
-            self.grid.iter()
-        }
-    }
-
-    fn init_vec_with<T, F>(mut f: F, capacity: usize) -> Vec<T>
-        where F: FnMut() -> T {
-        let mut vec: Vec<T> = Vec::with_capacity(capacity);
-        vec.resize_with(capacity, f);
-        return vec;
-    }
-
-    #[derive(Copy, Clone, Debug)]
-    pub enum Direction {
-        North, Northeast, East, Southeast, South, Southwest, West, Northwest
-    }
-
-    impl Direction {
-        pub fn x(&self) -> i8 {
-            match self {
-                Direction::North => 0,
-                Direction::Northeast => 1,
-                Direction::East => 1,
-                Direction::Southeast => 1,
-                Direction::South => 0,
-                Direction::Southwest => -1,
-                Direction::West => -1,
-                Direction::Northwest => -1,
-            }
-        }
-
-        pub fn y(&self) -> i8 {
-            match self {
-                Direction::North => -1,
-                Direction::Northeast => -1,
-                Direction::East => 0,
-                Direction::Southeast => 1,
-                Direction::South => 1,
-                Direction::Southwest => 1,
-                Direction::West => 0,
-                Direction::Northwest => -1,
-            }
-        }
-
-        pub fn random(rng: &mut RngBuffer) -> Direction {
-            match (rng.next() * 8.0) as usize {
-                0 => Direction::North,
-                1 => Direction::Northeast,
-                2 => Direction::East,
-                3 => Direction::Southeast,
-                4 => Direction::South,
-                5 => Direction::Southwest,
-                6 => Direction::West,
-                7 => Direction::Northwest,
-                _ => panic!("generated index should be in range")
-            }
-        }
-    }
-
-    #[derive(Copy, Clone, Debug)]
-    pub struct Location {
-        x: usize,
-        y: usize
-    }
-    impl Location {
-        pub fn x(&self) -> usize { self.x }
-        pub fn y(&self) -> usize { self.y }
-    }
-
-    impl Location {
-        pub fn new<T>(x: usize, y: usize, grid: &Grid<T>) -> Location {
-            Location {
-                x: x % grid.width,
-                y: y % grid.height,
-            }
-        }
-
-        pub fn coordinates(&self) -> (usize, usize) {
-            (self.x, self.y)
-        }
-
-        pub fn plus<T>(&self, direction: Direction, grid: &Grid<T>) -> Location {
-            Location {
-                x: grid.width.wrapping_add_signed(direction.x() as isize).add(self.x) % grid.width,
-                y: grid.height.wrapping_add_signed(direction.y() as isize).add(self.y) % grid.height,
-            }
-        }
-    }
-}
-
+use crate::grid::{Direction, Grid, Location};
 
 pub struct Entity {
     location: Location,
@@ -281,88 +141,89 @@ impl World {
             }
         }
     }
+}
 
-    pub fn step(&mut self, rng: &mut RngBuffer) {
 
-        // Determine entity actions.
-        self.actions.fill_with(|| None);
-        for space in self.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let action = entity.determine_action(&self, rng);
-                self.actions.replace(entity.location.coordinates(), Some(action));
-            }
-        }}
+pub fn step(world: &mut World, rng: &mut RngBuffer) {
 
-        // Find conflicting actions.
-        self.conflicts.fill_with(Conflict::none);
-        for space in self.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let location = entity.location;
-                let action = self.actions.get(location.coordinates()).as_ref()
-                    .expect("there should be an action at this location");
-                let conflict = action.conflicts();
+    // Determine entity actions.
+    world.actions.fill_with(|| None);
+    for space in world.entity_grid.iter() { match space {
+        None => {}
+        Some(entity) => {
+            let action = entity.determine_action(&world, rng);
+            world.actions.replace(entity.location.coordinates(), Some(action));
+        }
+    }}
 
-                let north = location.plus(Direction::North, &self.entity_grid);
-                let northeast = location.plus(Direction::Northeast, &self.entity_grid);
-                let east = location.plus(Direction::East, &self.entity_grid);
-                let southeast = location.plus(Direction::Southeast, &self.entity_grid);
-                let south = location.plus(Direction::South, &self.entity_grid);
-                let southwest = location.plus(Direction::Southwest, &self.entity_grid);
-                let west = location.plus(Direction::West, &self.entity_grid);
-                let northwest = location.plus(Direction::Northwest, &self.entity_grid);
+    // Find conflicting actions.
+    world.conflicts.fill_with(Conflict::none);
+    for space in world.entity_grid.iter() { match space {
+        None => {}
+        Some(entity) => {
+            let location = entity.location;
+            let action = world.actions.get(location.coordinates()).as_ref()
+                .expect("there should be an action at this location");
+            let conflict = action.conflicts();
 
-                self.conflicts.get_mut(north.coordinates()).south = conflict.north;
-                self.conflicts.get_mut(northeast.coordinates()).southwest = conflict.northeast;
-                self.conflicts.get_mut(east.coordinates()).west = conflict.east;
-                self.conflicts.get_mut(southeast.coordinates()).northwest = conflict.southeast;
-                self.conflicts.get_mut(south.coordinates()).north = conflict.south;
-                self.conflicts.get_mut(southwest.coordinates()).northeast = conflict.southwest;
-                self.conflicts.get_mut(west.coordinates()).east = conflict.west;
-                self.conflicts.get_mut(northwest.coordinates()).southeast = conflict.northwest;
-            }
-        }}
+            let north = location.plus(Direction::North, &world.entity_grid);
+            let northeast = location.plus(Direction::Northeast, &world.entity_grid);
+            let east = location.plus(Direction::East, &world.entity_grid);
+            let southeast = location.plus(Direction::Southeast, &world.entity_grid);
+            let south = location.plus(Direction::South, &world.entity_grid);
+            let southwest = location.plus(Direction::Southwest, &world.entity_grid);
+            let west = location.plus(Direction::West, &world.entity_grid);
+            let northwest = location.plus(Direction::Northwest, &world.entity_grid);
 
-        // Resolve conflicts.
-        self.outcomes.fill_with(|| None);
-        for space in self.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let action = self.actions.get(entity.location.coordinates()).as_ref()
-                    .expect("there should be an action at this location");
+            world.conflicts.get_mut(north.coordinates()).south = conflict.north;
+            world.conflicts.get_mut(northeast.coordinates()).southwest = conflict.northeast;
+            world.conflicts.get_mut(east.coordinates()).west = conflict.east;
+            world.conflicts.get_mut(southeast.coordinates()).northwest = conflict.southeast;
+            world.conflicts.get_mut(south.coordinates()).north = conflict.south;
+            world.conflicts.get_mut(southwest.coordinates()).northeast = conflict.southwest;
+            world.conflicts.get_mut(west.coordinates()).east = conflict.west;
+            world.conflicts.get_mut(northwest.coordinates()).southeast = conflict.northwest;
+        }
+    }}
 
-                for direction in action.conflicts().directions() {
-                    let conflict_direction = entity.location.plus(direction, &self.entity_grid);
-                    if self.conflicts.get(conflict_direction.coordinates()).is_conflicted() {
-                        self.outcomes.replace(entity.location.coordinates(), Some(Outcome::Blocked));
-                        break;
-                    }
+    // Resolve conflicts.
+    world.outcomes.fill_with(|| None);
+    for space in world.entity_grid.iter() { match space {
+        None => {}
+        Some(entity) => {
+            let action = world.actions.get(entity.location.coordinates()).as_ref()
+                .expect("there should be an action at this location");
+
+            for direction in action.conflicts().directions() {
+                let conflict_direction = entity.location.plus(direction, &world.entity_grid);
+                if world.conflicts.get(conflict_direction.coordinates()).is_conflicted() {
+                    world.outcomes.replace(entity.location.coordinates(), Some(Outcome::Blocked));
+                    break;
                 }
             }
-        }}
+        }
+    }}
 
-        // Resolve actions.
-        for space in self.entity_grid.iter() { match space {
-            None => {}
-            Some(entity) => {
-                let action = self.actions.get(entity.location.coordinates()).as_ref()
-                    .expect("there should be an action at this location");
-                if self.outcomes.get(entity.location.coordinates()).is_none() {
-                    let outcome = action.resolve(&self, entity);
-                    self.outcomes.replace(entity.location.coordinates(), Some(outcome));
-                }
+    // Resolve actions.
+    for space in world.entity_grid.iter() { match space {
+        None => {}
+        Some(entity) => {
+            let action = world.actions.get(entity.location.coordinates()).as_ref()
+                .expect("there should be an action at this location");
+            if world.outcomes.get(entity.location.coordinates()).is_none() {
+                let outcome = action.resolve(&world, entity);
+                world.outcomes.replace(entity.location.coordinates(), Some(outcome));
             }
-        }}
+        }
+    }}
 
-        // Apply action outcomes.
-        for space in self.outcomes.iter() { match space {
-            None => {}
-            Some(outcome) => {
-                apply_action_outcome(&mut self.entity_grid, outcome);
-            }
-        }}
-    }
+    // Apply action outcomes.
+    for space in world.outcomes.iter() { match space {
+        None => {}
+        Some(outcome) => {
+            apply_action_outcome(&mut world.entity_grid, outcome);
+        }
+    }}
 }
 
 fn apply_action_outcome(entity_grid: &mut Grid<Option<Entity>>, outcome: &Outcome) {

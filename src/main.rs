@@ -3,6 +3,7 @@ mod rng_buffer;
 mod matrix_test;
 mod world;
 mod fps_counter;
+mod grid;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
@@ -55,7 +56,7 @@ fn main() {
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
                 fps_counter.tick();
-                world.step(&mut rng);
+                world::step(&mut world, &mut rng);
                 world.draw(&mut graphics_window.get_graphics());
                 graphics_window.get_window().request_redraw();
             }
