@@ -68,7 +68,7 @@ impl FpsCounter {
         }
         let average_frame_time_millis = total_millis / frame_count as u128;
         let fps = 1000_u128.checked_div(average_frame_time_millis).unwrap_or(0);
-        println!("fps: {}", fps);
+        println!("fps: {} (frame-time: {} ms)", fps, average_frame_time_millis);
     }
 
     #[allow(unused)]
