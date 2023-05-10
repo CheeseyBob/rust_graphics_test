@@ -40,7 +40,15 @@ use crate::rng_buffer::RngBuffer;
 use crate::world::World;
 use crate::world_processor::WorldProcessor;
 
+
 fn main() {
+    let (width, height) = (1800, 900);
+    let window_config: WindowConfig = WindowConfig {
+        title: String::from("Test"),
+        resizable: false,
+        width: width as u32,
+        height: height as u32,
+    };
     let target_fps = 1000;
     let target_frame_time: Duration = Duration::from_millis(1000 / target_fps);
     let mut next_tick = Instant::now().add(target_frame_time);
@@ -49,9 +57,8 @@ fn main() {
 
     let mut rng = RngBuffer::with_capacity(1_000);
 
-    let mut world = World::new(800, 600);
-    load_test_world(&mut world, &mut rng);
-    //world.load(&mut rng);
+    let mut world = World::new(width, height);
+    load_test_world(&mut world, &mut rng, 50_000);
 
     let mut world_processor = WorldProcessor::new(world);
 
@@ -62,15 +69,7 @@ fn main() {
     }
     */
 
-
-
-    let config = WindowConfig {
-        title: String::from("Test"),
-        resizable: false,
-        width: 800,
-        height: 600,
-    };
-    let (mut graphics_window, event_loop) = GraphicsWindow::build(config);
+    let (mut graphics_window, event_loop) = GraphicsWindow::build(window_config);
 
     event_loop.run(move |event, _, control_flow| {
 
@@ -114,9 +113,9 @@ enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
 }
 
-fn load_test_world(world: &mut World, rng: &mut RngBuffer) {
+fn load_test_world(world: &mut World, rng: &mut RngBuffer, entity_count: u32) {
     let mut count = 0;
-    while count < 5_000 {
+    while count < entity_count {
         let x = (rng.generate_next() * world.width() as f64) as usize;
         let y = (rng.next() * world.height() as f64) as usize;
         let entity = world::entity::Entity::new(x, y, &world, rng);

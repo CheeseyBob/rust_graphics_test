@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+use std::thread;
 use crate::grid::{Direction, Grid, Location};
 use crate::rng_buffer::RngBuffer;
 use crate::world::{World};
@@ -26,24 +28,35 @@ impl WorldProcessor {
 
     pub fn step(&mut self, rng: &mut RngBuffer) {
 
+
+        /*
+        let mutex = Arc::new(Mutex::new(u));
+
+        thread::scope(|scope| {
+            scope.spawn(|| {
+
+            });
+            scope.spawn(|| {
+
+            });
+        });
+        */
+
+
+        // Determine entity actions and flag affected spaces for possible conflicts.
         for entity in self.world.iter_entities() {
             self.locations.push(entity.location);
             let action = entity.determine_action(&self.world, rng);
-            self.actions.replace(&entity.location.clone(), Some(action));
-        }
-
-        // Find conflicting actions.
-        for location in &self.locations {
-            let action = self.actions.get(location).as_ref()
-                .expect("there should be an action at this location");
 
             match action.conflicting_directions() {
                 None => {}
                 Some(directions) => for direction in directions {
-                    let conflict_location = self.world.add(&location, &direction);
+                    let conflict_location = self.world.add(&entity.location, &direction);
                     self.conflicts.get_mut(&conflict_location).add_from(&direction);
                 }
             }
+
+            self.actions.replace(&entity.location.clone(), Some(action));
         }
 
         // Resolve conflicts.
@@ -84,6 +97,29 @@ impl WorldProcessor {
         }
 
         // Clean up.
+
+        /*
+        thread::scope(|scope| {
+
+            scope.spawn(|| {
+                for location in &self.locations {
+                    self.actions.replace(location, None);
+                }
+            });
+            scope.spawn(|| {
+                for location in &self.locations {
+                    self.conflicts.replace(location, Conflict::none());
+                }
+            });
+            scope.spawn(|| {
+                for location in &self.locations {
+                    self.outcomes.replace(location, None);
+                }
+            });
+
+        });
+        */
+
         for location in &self.locations {
             self.actions.replace(location, None);
             self.conflicts.replace(location, Conflict::none());

@@ -17,6 +17,10 @@ impl WindowConfig {
         window.set_inner_size(PhysicalSize::new(self.width, self.height));
         return window;
     }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
 }
 
 pub struct GraphicsWindow {
@@ -25,21 +29,21 @@ pub struct GraphicsWindow {
     graphics_buffer: GraphicsBuffer,
 }
 
-fn build_window(event_loop: &EventLoop<()>, config: WindowConfig) -> Window {
+fn build_window(event_loop: &EventLoop<()>, config: &WindowConfig) -> Window {
     config.apply(
         WindowBuilder::new()
             .build(&event_loop)
-            .unwrap()
+            .expect("should be able to build a window")
     )
 }
 
 impl GraphicsWindow {
     pub fn build(config: WindowConfig) -> (GraphicsWindow, EventLoop<()>) {
         let event_loop = EventLoop::new();
-        let window = build_window(&event_loop, config);
+        let window = build_window(&event_loop, &config);
         let graphics_window = GraphicsWindow {
             graphics_context: unsafe { GraphicsContext::new(&window, &window) }.unwrap(),
-            graphics_buffer: GraphicsBuffer::create_for_window(&window),
+            graphics_buffer: GraphicsBuffer::new(&config),
             window,
         };
         return (graphics_window, event_loop);
@@ -61,19 +65,18 @@ pub struct GraphicsBuffer {
 }
 
 impl GraphicsBuffer {
-    fn create_for_window(window: &Window) -> Self {
-        let window_size = window.inner_size();
-        let buffer_size = window_size.width * window_size.height;
+    fn new(config: &WindowConfig) -> Self {
+        let buffer_size = config.width * config.height;
         Self {
             pixel_buffer: vec![0; buffer_size as usize],
-            width: window_size.width as usize,
-            height: window_size.height as usize,
+            width: config.width as usize,
+            height: config.height as usize,
         }
     }
 
     pub fn clear(&mut self, color: Color) {
 
-        // TODO ...
+        // TODO - Test a few solutions to find a reasonably performant one.
         //self.pixel_buffer.iter_mut().for_each(|px| *px = 0);
 
         self.pixel_buffer.set_all(color.to_u32());
@@ -119,6 +122,7 @@ pub struct Color {
     b: u8,
 }
 
+// TODO - Refactor so that the internal representation is u32 and test for potential performance increase.
 impl Color {
     #[allow(unused)]
     pub const BLACK: Color = Color::from_rgb(0, 0, 0);
