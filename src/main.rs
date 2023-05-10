@@ -15,6 +15,13 @@ macro_rules! getter {
 }
 
 /// Creates a public reference-getter function for given field.
+macro_rules! getter_mut {
+    ($var:ident: $typ:ty) => {
+        pub fn $var(&mut self) -> &mut $typ { &mut self.$var }
+    };
+}
+
+/// Creates a public reference-getter function for given field.
 macro_rules! getter_ref {
     ($var:ident: $typ:ty) => {
         pub fn $var(&self) -> &$typ { &self.$var }
@@ -84,8 +91,8 @@ fn main() {
             EventResponse::Tick => {
                 fps_counter.tick();
                 world_processor.step(&mut rng);
-                world_processor.world().draw(&mut graphics_window.get_graphics());
-                graphics_window.get_window().request_redraw();
+                world_processor.world().draw(&mut graphics_window.graphics_buffer());
+                graphics_window.window().request_redraw();
             }
             EventResponse::None => {}
         }
