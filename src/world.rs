@@ -22,7 +22,7 @@ pub mod entity {
 
         pub fn new(x: usize, y: usize, world: &World, rng: &mut RngBuffer) -> Entity {
             Entity {
-                location: world.entity_grid.location_at(x, y),
+                location: Location::at(x, y, &world.entity_grid),
                 facing: Direction::random(rng),
             }
         }

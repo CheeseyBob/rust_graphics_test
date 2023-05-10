@@ -26,40 +26,21 @@ impl<T> Grid<T> {
     }
 
     pub fn get(&self, location: &Location) -> &T {
-        let index = self.index(location);
-        &self.grid[index]
+        &self.grid[location.index]
     }
 
     pub fn get_mut(&mut self, location: &Location) -> &mut T {
-        let index = self.index(location);
-        &mut self.grid[index]
+        &mut self.grid[location.index]
     }
 
     pub fn replace(&mut self, location: &Location, value: T) -> T {
-        let index = self.index(location);
-        std::mem::replace(&mut self.grid[index], value)
-    }
-
-    fn index(&self, location: &Location) -> usize {
-        location.x + self.width * location.y
-    }
-
-    pub fn location_at(&self, x: usize, y: usize) -> Location {
-        Location {
-            x: x % self.width,
-            y: y % self.height,
-        }
+        std::mem::replace(&mut self.grid[location.index], value)
     }
 
     pub fn add(&self, location: &Location, direction: &Direction) -> Location {
-        Location {
-            x: self.width.wrapping_add_signed(direction.x()).add(location.x) % self.width,
-            y: self.height.wrapping_add_signed(direction.y()).add(location.y) % self.height,
-        }
-    }
-
-    pub fn iter(&self) -> Iter<'_, T> {
-        self.grid.iter()
+        let x = location.x + self.width.checked_add_signed(direction.x()).expect("adding +1/-1 to width should not overflow");
+        let y = location.y + self.height.checked_add_signed(direction.y()).expect("adding +1/-1 to height should not overflow");
+        Location::at(x, y, &self)
     }
 }
 
@@ -107,14 +88,21 @@ impl Direction {
     }
 }
 
-// TODO - Try refactoring Location to store the buffer index instead of / as well as the coordinates.
 #[derive(Copy, Clone, Debug)]
 pub struct Location {
+    index: usize,
     x: usize,
-    y: usize
+    y: usize,
 }
 
 impl Location {
     getter!(x: usize);
     getter!(y: usize);
+
+    pub fn at<T>(x: usize, y: usize, grid: &Grid<T>) -> Location {
+        let x = x % grid.width;
+        let y = y % grid.height;
+        let index = x + grid.width * y;
+        Location { x, y, index }
+    }
 }
