@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::slice::Iter;
 use crate::graphics_window::{Color, GraphicsBuffer};
 use crate::grid::{Direction, Grid, Location};
@@ -119,16 +120,20 @@ impl World {
     }
 
     pub fn get_entity(&self, location: &Location) -> Option<&Entity> {
-        match self.entity_grid.get(location) {
+        let guard = self.entity_grid.get(location);
+        let entity = guard.clone();
+        match entity {
             None => None,
-            Some(id) => Some(&self.entities[*id]),
+            Some(id) => Some(&self.entities[id]),
         }
     }
 
     pub fn get_entity_mut(&mut self, location: &Location) -> Option<&mut Entity> {
-        match self.entity_grid.get(location) {
+        let guard = self.entity_grid.get(location);
+        let entity = guard.clone();
+        match entity {
             None => None,
-            Some(id) => Some(&mut self.entities[*id]),
+            Some(id) => Some(&mut self.entities[id]),
         }
     }
 
@@ -138,32 +143,28 @@ impl World {
 
     pub fn move_entity(&mut self, location: &Location, direction: &Direction) -> Result<(), ()> {
         let new_location = self.add(location, direction);
-        let source = *self.entity_grid.get(location);
-        let target = *self.entity_grid.get(&new_location);
-        match (source, target) {
-            (Some(id), None) => {
-                let mut entity = &mut self.entities[id];
-                entity.location = new_location;
-                self.entity_grid.replace(location, target);
-                self.entity_grid.replace(&new_location, source);
-                Ok(())
-            }
-            _ => Err(()),
+
+        let mut source_guard = self.entity_grid.get(location);
+        let mut target_guard = self.entity_grid.get(&new_location);
+        if source_guard.is_none() || target_guard.is_some() {
+            return Err(())
         }
+
+        let id = source_guard.take().unwrap();
+        self.entities.get_mut(id).unwrap().location = new_location.clone();
+        target_guard.replace(id);
+        return Ok(());
     }
 
     pub fn place_entity(&mut self, entity: Entity) -> Result<(), ()> {
-        match self.get_entity(&entity.location) {
-            Some(_) => Err(()),
-            None => {
-                let id = self.entities.len() as EntityId;
-                let location = entity.location;
-                self.entities.push(entity);
-                match self.entity_grid.replace(&location, Some(id)) {
-                    None => Ok(()),
-                    Some(_) => panic!("this space should be unoccupied")
-                }
-            }
+        let mut guard = self.entity_grid.get(&entity.location);
+        if guard.is_some() {
+            return Err(());
         }
+
+        let id = self.entities.len() as EntityId;
+        self.entities.push(entity);
+        guard.replace(id);
+        return Ok(());
     }
 }

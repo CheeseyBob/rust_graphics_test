@@ -12,3 +12,4 @@ rand = "0.8.5"
 nalgebra = "0.32.2"
 # Note that nalgebra is dependent on matrixmultiply
 # matrixmultiply = "0.3.4"
+parking_lot = "0.12"

@@ -37,6 +37,7 @@ mod grid;
 mod world_processor;
 mod thread_pool;
 mod mutex_vec;
+mod mutex_vec_alt;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
@@ -52,8 +53,10 @@ use crate::world_processor::WorldProcessor;
 
 fn main() {
 
-    mutex_vec::test();
+    /*
+    mutex_vec_alt::test();
     std::process::exit(0);
+    */
 
     /*
     match matrix_test::run() {

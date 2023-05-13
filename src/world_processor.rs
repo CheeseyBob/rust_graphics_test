@@ -1,16 +1,19 @@
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use crate::grid::{Direction, Grid, Location};
 use crate::rng_buffer::RngBuffer;
+use crate::thread_pool::ThreadPool;
 use crate::world::{World};
 use crate::world::action::{Action, Outcome};
 
 pub struct WorldProcessor {
     world: World,
     locations: Vec<Location>,
-    actions: Grid<Option<Action>>,
+    actions: Arc<Grid<Option<Action>>>,
     conflicts: Grid<Conflict>,
     outcomes: Grid<Option<Outcome>>,
+    thread_pool: ThreadPool
 }
 
 impl WorldProcessor {
@@ -19,10 +22,11 @@ impl WorldProcessor {
     pub fn new(world: World) -> WorldProcessor {
         WorldProcessor {
             locations: Vec::with_capacity(world.width() * world.height()),
-            actions: Grid::new_filled_with(|| None, world.width(), world.height()),
+            actions: Arc::new(Grid::new_filled_with(|| None, world.width(), world.height())),
             conflicts: Grid::new_filled_with(Conflict::none, world.width(), world.height()),
             outcomes: Grid::new_filled_with(|| None, world.width(), world.height()),
             world,
+            thread_pool: ThreadPool::new(5),
         }
     }
 
@@ -52,24 +56,24 @@ impl WorldProcessor {
                 None => {}
                 Some(directions) => for direction in directions {
                     let conflict_location = self.world.add(&entity.location, &direction);
-                    self.conflicts.get_mut(&conflict_location).add_from(&direction);
+                    self.conflicts.get(&conflict_location).add_from(&direction);
                 }
             }
 
-            self.actions.replace(&entity.location.clone(), Some(action));
+            self.actions.get(&entity.location).replace(action);
         }
 
         // Resolve conflicts.
         for location in &self.locations {
-            let action = self.actions.get(location).as_ref()
+            let guard = self.actions.get(&location);
+            let action = guard.as_ref()
                 .expect("there should be an action at this location");
-
             match action.conflicting_directions() {
                 None => {}
                 Some(directions) => for direction in &directions {
                     let conflict_direction = self.world.add(location, direction);
                     if self.conflicts.get(&conflict_direction).is_conflicted() {
-                        self.outcomes.replace(location, Some(Outcome::Blocked));
+                        self.outcomes.get(location).replace(Outcome::Blocked);
                         break;
                     }
                 }
@@ -80,18 +84,20 @@ impl WorldProcessor {
         for location in &self.locations {
             let entity = self.world.get_entity(location)
                 .expect("entity should be at this location");
-            let action = self.actions.get(location).as_ref()
+            let guard = self.actions.get(location);
+            let action = guard.as_ref()
                 .expect("there should be an action at this location");
 
             if self.outcomes.get(location).is_none() {
                 let outcome = action.resolve(entity, &self.world);
-                self.outcomes.replace(location, Some(outcome));
+                self.outcomes.get(location).replace(outcome);
             }
         }
 
         // Apply action outcomes.
         for location in &self.locations {
-            let outcome = self.outcomes.get(location).as_ref()
+            let guard = self.outcomes.get(location);
+            let outcome = guard.as_ref()
                 .expect("there should be an outcome at this location");
             apply_action_outcome(outcome, location, &mut self.world);
         }
@@ -121,9 +127,9 @@ impl WorldProcessor {
         */
 
         for location in &self.locations {
-            self.actions.replace(location, None);
-            self.conflicts.replace(location, Conflict::none());
-            self.outcomes.replace(location, None);
+            self.actions.get(location).take();
+            self.conflicts.get(location).clear();
+            self.outcomes.get(location).take();
         }
         self.locations.clear();
     }
@@ -179,6 +185,17 @@ impl Conflict {
             Direction::West         => self.east = true,
             Direction::Northwest    => self.southeast = true,
         }
+    }
+
+    fn clear(&mut self) {
+        self.south = false;
+        self.southwest = false;
+        self.west = false;
+        self.northwest = false;
+        self.north = false;
+        self.northeast = false;
+        self.east = false;
+        self.southeast = false;
     }
 
     fn is_conflicted(&self) -> bool {

@@ -1,11 +1,12 @@
 use std::ops::Add;
 use std::slice::Iter;
+use parking_lot::{Mutex, MutexGuard, RawMutex};
 use crate::rng_buffer::RngBuffer;
 
 pub struct Grid<T> {
     width: usize,
     height: usize,
-    grid: Vec<T>,
+    grid: Vec<Mutex<T>>,
 }
 
 impl<T> Grid<T> {
@@ -15,26 +16,14 @@ impl<T> Grid<T> {
     pub fn new_filled_with<F>(mut f: F, width: usize, height: usize) -> Grid<T>
         where F: FnMut() -> T {
         Grid {
-            grid: init_vec_with(f, width * height),
+            grid: init_vec_with(|| Mutex::new(f()), width * height),
             width,
             height,
         }
     }
 
-    pub fn fill_with<F: FnMut() -> T>(&mut self, mut f: F) {
-        self.grid.fill_with(f);
-    }
-
-    pub fn get(&self, location: &Location) -> &T {
-        &self.grid[location.index]
-    }
-
-    pub fn get_mut(&mut self, location: &Location) -> &mut T {
-        &mut self.grid[location.index]
-    }
-
-    pub fn replace(&mut self, location: &Location, value: T) -> T {
-        std::mem::replace(&mut self.grid[location.index], value)
+    pub fn get(&self, location: &Location) -> MutexGuard<'_, T> {
+        self.grid[location.index].lock()
     }
 
     pub fn add(&self, location: &Location, direction: &Direction) -> Location {
