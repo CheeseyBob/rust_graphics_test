@@ -35,6 +35,7 @@ mod world;
 mod fps_counter;
 mod grid;
 mod world_processor;
+mod thread_pool;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
@@ -49,6 +50,20 @@ use crate::world_processor::WorldProcessor;
 
 
 fn main() {
+
+    thread_pool::test();
+    std::process::exit(0);
+
+    /*
+    match matrix_test::run() {
+        None => exit(0),
+        Some(_) => {},
+    }
+    */
+
+    /**********************************************************************************************/
+
+    let draw_is_enabled = true;
     let (width, height) = (1800, 900);
     let window_config: WindowConfig = WindowConfig {
         title: String::from("Test"),
@@ -69,13 +84,6 @@ fn main() {
 
     let mut world_processor = WorldProcessor::new(world);
 
-    /*
-    match matrix_test::run() {
-        None => exit(0),
-        Some(_) => {},
-    }
-    */
-
     let (mut graphics_window, event_loop) = GraphicsWindow::build(window_config);
 
     event_loop.run(move |event, _, control_flow| {
@@ -91,7 +99,9 @@ fn main() {
             EventResponse::Tick => {
                 fps_counter.tick();
                 world_processor.step(&mut rng);
-                world_processor.world().draw(&mut graphics_window.graphics_buffer());
+                if draw_is_enabled {
+                    world_processor.world().draw(&mut graphics_window.graphics_buffer());
+                }
                 graphics_window.window().request_redraw();
             }
             EventResponse::None => {}
