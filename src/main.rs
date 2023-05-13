@@ -36,6 +36,7 @@ mod fps_counter;
 mod grid;
 mod world_processor;
 mod thread_pool;
+mod mutex_vec;
 
 use std::ops::Add;
 use std::time::{Duration, Instant};
@@ -51,7 +52,7 @@ use crate::world_processor::WorldProcessor;
 
 fn main() {
 
-    thread_pool::test();
+    mutex_vec::test();
     std::process::exit(0);
 
     /*
