@@ -1,4 +1,5 @@
-use std::sync::{Arc, mpsc, Mutex};
+use std::ops::Deref;
+use std::sync::{Arc, LockResult, mpsc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -53,7 +54,10 @@ struct Worker {
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || loop {
-            let job = receiver.lock().unwrap().recv().unwrap();
+            let job = match receiver.lock().expect("error getting lock").recv() {
+                Ok(job ) => { job }
+                Err(_) => { break }
+            };
             println!("thread running job");
             job();
         });
