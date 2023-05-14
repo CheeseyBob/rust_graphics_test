@@ -12,12 +12,13 @@ pub struct WorldProcessor {
     locations: Vec<Location>,
     actions: ActionGrid,
     conflicts: ConflictGrid,
-    outcomes: Grid<Option<Outcome>>,
+    outcomes: OutcomeGrid,
     thread_pool: ThreadPool
 }
 
 type ActionGrid = Arc<Grid<Option<Action>>>;
 type ConflictGrid = Arc<Grid<Conflict>>;
+type OutcomeGrid = Arc<Grid<Option<Outcome>>>;
 
 impl WorldProcessor {
     pub fn new(world: &World) -> WorldProcessor {
@@ -25,7 +26,7 @@ impl WorldProcessor {
             locations: Vec::with_capacity(world.width() * world.height()),
             actions: Arc::new(Grid::new_filled_with(|| None, world.width(), world.height())),
             conflicts: Arc::new(Grid::new_filled_with(Conflict::none, world.width(), world.height())),
-            outcomes: Grid::new_filled_with(|| None, world.width(), world.height()),
+            outcomes: Arc::new(Grid::new_filled_with(|| None, world.width(), world.height())),
             thread_pool: ThreadPool::new(5),
         }
     }
@@ -71,26 +72,21 @@ impl WorldProcessor {
 
     fn resolve_conflicts(&self, world: &World) {
         thread::scope(|scope| {
-
-            scope.spawn(move || {
-
-            });
-        });
-        for location in &self.locations {
-            let guard = self.actions.get(&location);
-            let action = guard.as_ref()
-                .expect("there should be an action at this location");
-            match action.conflicting_directions() {
-                None => {}
-                Some(directions) => for direction in &directions {
-                    let conflict_direction = world.add(location, direction);
-                    if self.conflicts.get(&conflict_direction).is_conflicted() {
-                        self.outcomes.get(location).replace(Outcome::Blocked);
-                        break;
-                    }
-                }
+            let parallelism = 10;
+            let total_length = self.locations.len();
+            let slice_length = total_length / parallelism;
+            for i in 0..parallelism {
+                let slice_start = i * slice_length;
+                let slice_end = total_length - (parallelism - i - 1) * slice_length;
+                let locations = &self.locations[slice_start..slice_end];
+                let actions = self.actions.clone();
+                let conflicts = self.conflicts.clone();
+                let outcomes = self.outcomes.clone();
+                scope.spawn(move || {
+                    resolve_conflicts_for_slice(locations, world, actions, conflicts, outcomes);
+                });
             }
-        }
+        });
     }
 
     fn resolve_actions(&self, world: &World) {
@@ -166,6 +162,24 @@ fn determine_actions_for_slice(locations: &[Location], world: &World, actions: A
         }
 
         actions.get(&entity.location).replace(action);
+    }
+}
+
+fn resolve_conflicts_for_slice(locations: &[Location], world: &World, actions: ActionGrid, conflicts: ConflictGrid, outcomes: OutcomeGrid) {
+    for location in locations {
+        let guard = actions.get(&location);
+        let action = guard.as_ref()
+            .expect("there should be an action at this location");
+        match action.conflicting_directions() {
+            None => {}
+            Some(directions) => for direction in &directions {
+                let conflict_direction = world.add(location, direction);
+                if conflicts.get(&conflict_direction).is_conflicted() {
+                    outcomes.get(location).replace(Outcome::Blocked);
+                    break;
+                }
+            }
+        }
     }
 }
 
