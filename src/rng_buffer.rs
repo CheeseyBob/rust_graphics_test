@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use rand::random;
 
 pub struct RngBuffer {
@@ -36,4 +39,16 @@ impl RngBuffer {
         self.buffer[self.next] = random();
         self.buffer[self.next]
     }
+}
+
+static DEFAULT: Lazy<Mutex<RngBuffer>> = Lazy::new(|| {
+    Mutex::new(RngBuffer::with_capacity(10_000))
+});
+
+pub fn generate_next() -> f64 {
+    DEFAULT.lock().generate_next()
+}
+
+pub fn next() -> f64 {
+    DEFAULT.lock().next()
 }

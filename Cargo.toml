@@ -13,3 +13,4 @@ nalgebra = "0.32.2"
 # Note that nalgebra is dependent on matrixmultiply
 # matrixmultiply = "0.3.4"
 parking_lot = "0.12"
+once_cell = "1.17"

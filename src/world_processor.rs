@@ -1,4 +1,5 @@
 use std::num::NonZeroUsize;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use crate::grid::{Direction, Grid, Location};
@@ -8,29 +9,28 @@ use crate::world::{World};
 use crate::world::action::{Action, Outcome};
 
 pub struct WorldProcessor {
-    world: World,
     locations: Vec<Location>,
-    actions: Arc<Grid<Option<Action>>>,
-    conflicts: Grid<Conflict>,
+    actions: ActionGrid,
+    conflicts: ConflictGrid,
     outcomes: Grid<Option<Outcome>>,
     thread_pool: ThreadPool
 }
 
-impl WorldProcessor {
-    getter_ref!(world: World);
+type ActionGrid = Arc<Grid<Option<Action>>>;
+type ConflictGrid = Arc<Grid<Conflict>>;
 
-    pub fn new(world: World) -> WorldProcessor {
+impl WorldProcessor {
+    pub fn new(world: &World) -> WorldProcessor {
         WorldProcessor {
             locations: Vec::with_capacity(world.width() * world.height()),
             actions: Arc::new(Grid::new_filled_with(|| None, world.width(), world.height())),
-            conflicts: Grid::new_filled_with(Conflict::none, world.width(), world.height()),
+            conflicts: Arc::new(Grid::new_filled_with(Conflict::none, world.width(), world.height())),
             outcomes: Grid::new_filled_with(|| None, world.width(), world.height()),
-            world,
             thread_pool: ThreadPool::new(5),
         }
     }
 
-    pub fn step(&mut self, rng: &mut RngBuffer) {
+    pub fn step(&mut self, world: &mut World) {
 
 
         /*
@@ -46,22 +46,13 @@ impl WorldProcessor {
         });
         */
 
+        // Get locations that need processing.
+        for entity in world.iter_entities() {
+            self.locations.push(entity.location);
+        }
 
         // Determine entity actions and flag affected spaces for possible conflicts.
-        for entity in self.world.iter_entities() {
-            self.locations.push(entity.location);
-            let action = entity.determine_action(&self.world, rng);
-
-            match action.conflicting_directions() {
-                None => {}
-                Some(directions) => for direction in directions {
-                    let conflict_location = self.world.add(&entity.location, &direction);
-                    self.conflicts.get(&conflict_location).add_from(&direction);
-                }
-            }
-
-            self.actions.get(&entity.location).replace(action);
-        }
+        self.test(world);
 
         // Resolve conflicts.
         for location in &self.locations {
@@ -71,7 +62,7 @@ impl WorldProcessor {
             match action.conflicting_directions() {
                 None => {}
                 Some(directions) => for direction in &directions {
-                    let conflict_direction = self.world.add(location, direction);
+                    let conflict_direction = world.add(location, direction);
                     if self.conflicts.get(&conflict_direction).is_conflicted() {
                         self.outcomes.get(location).replace(Outcome::Blocked);
                         break;
@@ -82,14 +73,14 @@ impl WorldProcessor {
 
         // Resolve actions.
         for location in &self.locations {
-            let entity = self.world.get_entity(location)
+            let entity = world.get_entity(location)
                 .expect("entity should be at this location");
             let guard = self.actions.get(location);
             let action = guard.as_ref()
                 .expect("there should be an action at this location");
 
             if self.outcomes.get(location).is_none() {
-                let outcome = action.resolve(entity, &self.world);
+                let outcome = action.resolve(entity, &world);
                 self.outcomes.get(location).replace(outcome);
             }
         }
@@ -99,7 +90,8 @@ impl WorldProcessor {
             let guard = self.outcomes.get(location);
             let outcome = guard.as_ref()
                 .expect("there should be an outcome at this location");
-            apply_action_outcome(outcome, location, &mut self.world);
+
+            apply_action_outcome(outcome, location, world);
         }
 
         // Clean up.
@@ -132,6 +124,48 @@ impl WorldProcessor {
             self.outcomes.get(location).take();
         }
         self.locations.clear();
+    }
+
+    fn test(&self, world: &World) {
+        thread::scope(|scope| {
+            let slice1_start = 0;
+            let slice1_end = self.locations.len() / 2;
+            let slice2_start = slice1_end;
+            let slice2_end = self.locations.len();
+            let slice1 = &self.locations[slice1_start..slice1_end];
+            let slice2 = &self.locations[slice2_start..slice2_end];
+
+            let actions_ref1 = self.actions.clone();
+            let actions_ref2 = self.actions.clone();
+
+            let conflicts_ref1 = self.conflicts.clone();
+            let conflicts_ref2 = self.conflicts.clone();
+
+            scope.spawn(move || {
+                determine_actions_and_flag_possible_conflicts(slice1, world, actions_ref1, conflicts_ref1);
+            });
+            scope.spawn(move || {
+                determine_actions_and_flag_possible_conflicts(slice2, world, actions_ref2, conflicts_ref2);
+            });
+        });
+    }
+}
+
+fn determine_actions_and_flag_possible_conflicts(locations: &[Location], world: &World, actions: ActionGrid, conflicts: ConflictGrid) {
+    for location in locations {
+        let entity = world.get_entity(location)
+            .expect("entity should be at this location");
+        let action = entity.determine_action(world);
+
+        match action.conflicting_directions() {
+            None => {}
+            Some(directions) => for direction in directions {
+                let conflict_location = world.add(&entity.location, &direction);
+                conflicts.get(&conflict_location).add_from(&direction);
+            }
+        }
+
+        actions.get(&entity.location).replace(action);
     }
 }
 

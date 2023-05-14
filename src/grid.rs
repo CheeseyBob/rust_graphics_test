@@ -1,6 +1,7 @@
 use std::ops::Add;
 use std::slice::Iter;
 use parking_lot::{Mutex, MutexGuard, RawMutex};
+use crate::rng_buffer;
 use crate::rng_buffer::RngBuffer;
 
 pub struct Grid<T> {
@@ -62,8 +63,8 @@ impl Direction {
         }
     }
 
-    pub fn random(rng: &mut RngBuffer) -> Direction {
-        match (rng.next() * 8.0) as usize {
+    pub fn random() -> Direction {
+        match (rng_buffer::next() * 8.0) as usize {
             0 => Direction::North,
             1 => Direction::Northeast,
             2 => Direction::East,

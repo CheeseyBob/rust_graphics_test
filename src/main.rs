@@ -40,6 +40,7 @@ mod mutex_vec;
 mod mutex_vec_alt;
 
 use std::ops::Add;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow};
@@ -81,12 +82,10 @@ fn main() {
 
     let mut fps_counter = FpsCounter::every_32_frames();
 
-    let mut rng = RngBuffer::with_capacity(1_000);
-
     let mut world = World::new(width, height);
-    load_test_world(&mut world, &mut rng, 50_000);
+    load_test_world(&mut world, 50_000);
 
-    let mut world_processor = WorldProcessor::new(world);
+    let mut world_processor = WorldProcessor::new(&world);
 
     let (mut graphics_window, event_loop) = GraphicsWindow::build(window_config);
 
@@ -102,9 +101,9 @@ fn main() {
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
                 fps_counter.tick();
-                world_processor.step(&mut rng);
+                world_processor.step(&mut world);
                 if draw_is_enabled {
-                    world_processor.world().draw(&mut graphics_window.graphics_buffer());
+                    world.draw(&mut graphics_window.graphics_buffer());
                 }
                 graphics_window.window().request_redraw();
             }
@@ -134,12 +133,12 @@ enum EventResponse {
     None, Exit, RedrawRequested(WindowId), Tick
 }
 
-fn load_test_world(world: &mut World, rng: &mut RngBuffer, entity_count: u32) {
+fn load_test_world(world: &mut World, entity_count: u32) {
     let mut count = 0;
     while count < entity_count {
-        let x = (rng.generate_next() * world.width() as f64) as usize;
-        let y = (rng.next() * world.height() as f64) as usize;
-        let entity = world::entity::Entity::new(x, y, &world, rng);
+        let x = (rng_buffer::generate_next() * world.width() as f64) as usize;
+        let y = (rng_buffer::next() * world.height() as f64) as usize;
+        let entity = world::entity::Entity::new(x, y, &world);
         if world.place_entity(entity).is_ok() {
             count += 1;
         }

@@ -5,9 +5,10 @@ use crate::grid::{Direction, Grid, Location};
 use crate::world::entity::Entity;
 
 pub mod entity {
+    use std::sync::Arc;
     use crate::graphics_window::{Color, GraphicsBuffer};
     use crate::grid::{Direction, Location};
-    use crate::rng_buffer::RngBuffer;
+    use crate::rng_buffer;
     use crate::world::action::Action;
     use crate::world::World;
 
@@ -21,22 +22,22 @@ pub mod entity {
             graphics.draw_pixel(self.location.x(), self.location.y(), Color::WHITE);
         }
 
-        pub fn new(x: usize, y: usize, world: &World, rng: &mut RngBuffer) -> Entity {
+        pub fn new(x: usize, y: usize, world: &World) -> Entity {
             Entity {
                 location: Location::at(x, y, &world.entity_grid),
-                facing: Direction::random(rng),
+                facing: Direction::random(),
             }
         }
 
-        pub fn determine_action(&self, world: &World, rng: &mut RngBuffer) -> Action {
-            match rng.next() {
-                roll if roll < 0.05 => Action::Turn(Direction::random(rng)),
+        pub fn determine_action(&self, world: &World) -> Action {
+            match rng_buffer::next() {
+                roll if roll < 0.05 => Action::Turn(Direction::random()),
                 roll if roll < 0.95 => Action::Move(self.facing),
                 _ => Action::Wait,
             }
         }
 
-        pub fn step(&self, rng: &mut RngBuffer) {
+        pub fn step(&self) {
 
             // TODO ...
 
