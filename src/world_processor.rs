@@ -32,29 +32,50 @@ impl WorldProcessor {
 
     pub fn step(&mut self, world: &mut World) {
 
+        self.get_locations_for_processing(world);
 
-        /*
-        let mutex = Arc::new(Mutex::new(u));
+        self.determine_actions(world);
 
-        thread::scope(|scope| {
-            scope.spawn(|| {
+        self.resolve_conflicts(world);
 
-            });
-            scope.spawn(|| {
+        self.resolve_actions(world);
 
-            });
-        });
-        */
+        self.apply_outcomes(world);
 
-        // Get locations that need processing.
+        self.clean_up();
+    }
+
+    fn get_locations_for_processing(&mut self, world: &World) {
         for entity in world.iter_entities() {
             self.locations.push(entity.location);
         }
+    }
 
-        // Determine entity actions and flag affected spaces for possible conflicts.
-        self.test(world);
+    fn determine_actions(&self, world: &World) {
+        thread::scope(|scope| {
+            let parallelism = 10;
+            let total_length = self.locations.len();
+            let slice_length = total_length / parallelism;
+            for i in 0..parallelism {
+                let slice_start = i * slice_length;
+                let slice_end = total_length - (parallelism - i - 1) * slice_length;
+                let locations = &self.locations[slice_start..slice_end];
+                let actions = self.actions.clone();
+                let conflicts = self.conflicts.clone();
+                scope.spawn(move || {
+                    determine_actions_for_slice(locations, world, actions, conflicts);
+                });
+            }
+        });
+    }
 
-        // Resolve conflicts.
+    fn resolve_conflicts(&self, world: &World) {
+        thread::scope(|scope| {
+
+            scope.spawn(move || {
+
+            });
+        });
         for location in &self.locations {
             let guard = self.actions.get(&location);
             let action = guard.as_ref()
@@ -70,8 +91,9 @@ impl WorldProcessor {
                 }
             }
         }
+    }
 
-        // Resolve actions.
+    fn resolve_actions(&self, world: &World) {
         for location in &self.locations {
             let entity = world.get_entity(location)
                 .expect("entity should be at this location");
@@ -84,8 +106,9 @@ impl WorldProcessor {
                 self.outcomes.get(location).replace(outcome);
             }
         }
+    }
 
-        // Apply action outcomes.
+    fn apply_outcomes(&self, world: &mut World) {
         for location in &self.locations {
             let guard = self.outcomes.get(location);
             let outcome = guard.as_ref()
@@ -93,8 +116,9 @@ impl WorldProcessor {
 
             apply_action_outcome(outcome, location, world);
         }
+    }
 
-        // Clean up.
+    fn clean_up(&mut self) {
 
         /*
         thread::scope(|scope| {
@@ -125,33 +149,9 @@ impl WorldProcessor {
         }
         self.locations.clear();
     }
-
-    fn test(&self, world: &World) {
-        thread::scope(|scope| {
-            let slice1_start = 0;
-            let slice1_end = self.locations.len() / 2;
-            let slice2_start = slice1_end;
-            let slice2_end = self.locations.len();
-            let slice1 = &self.locations[slice1_start..slice1_end];
-            let slice2 = &self.locations[slice2_start..slice2_end];
-
-            let actions_ref1 = self.actions.clone();
-            let actions_ref2 = self.actions.clone();
-
-            let conflicts_ref1 = self.conflicts.clone();
-            let conflicts_ref2 = self.conflicts.clone();
-
-            scope.spawn(move || {
-                determine_actions_and_flag_possible_conflicts(slice1, world, actions_ref1, conflicts_ref1);
-            });
-            scope.spawn(move || {
-                determine_actions_and_flag_possible_conflicts(slice2, world, actions_ref2, conflicts_ref2);
-            });
-        });
-    }
 }
 
-fn determine_actions_and_flag_possible_conflicts(locations: &[Location], world: &World, actions: ActionGrid, conflicts: ConflictGrid) {
+fn determine_actions_for_slice(locations: &[Location], world: &World, actions: ActionGrid, conflicts: ConflictGrid) {
     for location in locations {
         let entity = world.get_entity(location)
             .expect("entity should be at this location");
