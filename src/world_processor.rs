@@ -8,9 +8,13 @@ use crate::thread_pool::ThreadPool;
 use crate::world::{World};
 use crate::world::action::{Action, Outcome};
 
+const PARALLELISM: usize = 10;
+
 static mut WORLD: Option<World> = None;
 static mut LOCATIONS: Vec<Location> = Vec::new();
 static mut ACTION_GRID: Vec<Option<Action>> = Vec::new();
+static mut CONFLICT_GRID: Vec<Conflict> = Vec::new();
+static mut OUTCOME_GRID: Vec<Option<Outcome>> = Vec::new();
 
 unsafe fn action_at(location: &Location) -> &Option<Action> {
     ACTION_GRID.get_unchecked(location.index())
@@ -20,28 +24,33 @@ unsafe fn action_at_mut(location: &Location) -> &mut Option<Action> {
     ACTION_GRID.get_unchecked_mut(location.index())
 }
 
-
-pub struct WorldProcessor {
-    conflicts: ConflictGrid,
-    outcomes: OutcomeGrid,
+unsafe fn conflict_at(location: &Location) -> &Conflict {
+    CONFLICT_GRID.get_unchecked(location.index())
 }
 
-type ActionGrid = Arc<Grid<Option<Action>>>;
-type ConflictGrid = Arc<Grid<Conflict>>;
-type OutcomeGrid = Arc<Grid<Option<Outcome>>>;
-const PARALLELISM: usize = 10;
+unsafe fn conflict_at_mut(location: &Location) -> &mut Conflict {
+    CONFLICT_GRID.get_unchecked_mut(location.index())
+}
 
-pub fn init(world: World) -> WorldProcessor {
-    let (width, height) = (world.width(), world.height());
+unsafe fn outcome_at(location: &Location) -> &Option<Outcome> {
+    OUTCOME_GRID.get_unchecked(location.index())
+}
+
+unsafe fn outcome_at_mut(location: &Location) -> &mut Option<Outcome> {
+    OUTCOME_GRID.get_unchecked_mut(location.index())
+}
+
+pub fn init(world: World) {
+    let size = world.width() * world.height();
     unsafe {
         WORLD = Some(world);
-        LOCATIONS = Vec::with_capacity(width * height);
-        ACTION_GRID = Vec::with_capacity(width * height);
+        LOCATIONS = Vec::with_capacity(size);
+        ACTION_GRID = Vec::with_capacity(size);
         ACTION_GRID.fill_with(|| { None });
-    }
-    WorldProcessor {
-        conflicts: Arc::new(Grid::new_filled_with(Conflict::none, width, height)),
-        outcomes: Arc::new(Grid::new_filled_with(|| None, width, height)),
+        CONFLICT_GRID = Vec::with_capacity(size);
+        CONFLICT_GRID.fill_with(|| { Conflict::none() });
+        OUTCOME_GRID = Vec::with_capacity(size);
+        OUTCOME_GRID.fill_with(|| { None });
     }
 }
 
@@ -53,112 +62,110 @@ pub fn draw(graphics_buffer: &mut GraphicsBuffer) {
     }
 }
 
-impl WorldProcessor {
-    pub fn step(&mut self) {
+pub fn step() {
 
-        self.get_locations_for_processing();
+    get_locations_for_processing();
 
-        self.determine_actions();
+    determine_actions();
 
-        self.resolve_conflicts();
+    resolve_conflicts();
 
-        self.determine_outcomes();
+    determine_outcomes();
 
-        self.apply_outcomes();
+    apply_outcomes();
 
-        self.clean_up();
-    }
+    clean_up();
+}
 
-    fn get_locations_for_processing(&mut self) {
-        unsafe {
-            for entity in WORLD.as_ref().unwrap().iter_entities() {
-                LOCATIONS.push(entity.location);
-            }
-        }
-    }
-
-    fn determine_actions(&self) {
-        thread::scope(|scope| {
-            let parallelism = PARALLELISM;
-            let total_length = unsafe { LOCATIONS.len() };
-            let slice_length = total_length / parallelism;
-            for i in 0..parallelism {
-                let slice_start = i * slice_length;
-                let slice_end = total_length - (parallelism - i - 1) * slice_length;
-                    let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-                let conflicts = self.conflicts.clone();
-                scope.spawn(move || {
-                    determine_actions_for_slice(locations, conflicts);
-                });
-            }
-        });
-    }
-
-    fn resolve_conflicts(&self) {
-        thread::scope(|scope| {
-            let parallelism = PARALLELISM;
-            let total_length = unsafe { LOCATIONS.len() };
-            let slice_length = total_length / parallelism;
-            for i in 0..parallelism {
-                let slice_start = i * slice_length;
-                let slice_end = total_length - (parallelism - i - 1) * slice_length;
-                let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-                let conflicts = self.conflicts.clone();
-                let outcomes = self.outcomes.clone();
-                scope.spawn(move || {
-                    resolve_conflicts_for_slice(locations, conflicts, outcomes);
-                });
-            }
-        });
-    }
-
-    fn determine_outcomes(&self) {
-        thread::scope(|scope| {
-            let parallelism = PARALLELISM;
-            let total_length = unsafe { LOCATIONS.len() };
-            let slice_length = total_length / parallelism;
-            for i in 0..parallelism {
-                let slice_start = i * slice_length;
-                let slice_end = total_length - (parallelism - i - 1) * slice_length;
-                let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-                let outcomes = self.outcomes.clone();
-                scope.spawn(move || {
-                    determine_outcomes_for_slice(locations, outcomes);
-                });
-            }
-        });
-    }
-
-    fn apply_outcomes(&self) {
-        thread::scope(|scope| {
-            let parallelism = PARALLELISM;
-            let total_length = unsafe { LOCATIONS.len() };
-            let slice_length = total_length / parallelism;
-            for i in 0..parallelism {
-                let slice_start = i * slice_length;
-                let slice_end = total_length - (parallelism - i - 1) * slice_length;
-                let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-                let outcomes = self.outcomes.clone();
-                scope.spawn(move || {
-                    apply_outcomes_for_slice(locations, outcomes);
-                });
-            }
-        });
-    }
-
-    fn clean_up(&mut self) {
-        unsafe {
-            for location in &LOCATIONS {
-                action_at_mut(location).take();
-                self.conflicts.get(location).clear(); // TODO - This doesn't catch everything.
-                self.outcomes.get(location).take();
-            }
-            LOCATIONS.clear();
+fn get_locations_for_processing() {
+    unsafe {
+        for entity in WORLD.as_ref().unwrap().iter_entities() {
+            LOCATIONS.push(entity.location);
         }
     }
 }
 
-fn determine_actions_for_slice(locations: &[Location], conflicts: ConflictGrid) {
+fn determine_actions() {
+    thread::scope(|scope| {
+        let parallelism = PARALLELISM;
+        let total_length = unsafe { LOCATIONS.len() };
+        let slice_length = total_length / parallelism;
+        for i in 0..parallelism {
+            let slice_start = i * slice_length;
+            let slice_end = total_length - (parallelism - i - 1) * slice_length;
+                let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
+            scope.spawn(move || {
+                determine_actions_for_slice(locations);
+            });
+        }
+    });
+}
+
+fn resolve_conflicts() {
+    thread::scope(|scope| {
+        let parallelism = PARALLELISM;
+        let total_length = unsafe { LOCATIONS.len() };
+        let slice_length = total_length / parallelism;
+        for i in 0..parallelism {
+            let slice_start = i * slice_length;
+            let slice_end = total_length - (parallelism - i - 1) * slice_length;
+            let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
+            scope.spawn(move || {
+                resolve_conflicts_for_slice(locations);
+            });
+        }
+    });
+}
+
+fn determine_outcomes() {
+    thread::scope(|scope| {
+        let parallelism = PARALLELISM;
+        let total_length = unsafe { LOCATIONS.len() };
+        let slice_length = total_length / parallelism;
+        for i in 0..parallelism {
+            let slice_start = i * slice_length;
+            let slice_end = total_length - (parallelism - i - 1) * slice_length;
+            let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
+            scope.spawn(move || {
+                determine_outcomes_for_slice(locations);
+            });
+        }
+    });
+}
+
+fn apply_outcomes() {
+    thread::scope(|scope| {
+        let parallelism = PARALLELISM;
+        let total_length = unsafe { LOCATIONS.len() };
+        let slice_length = total_length / parallelism;
+        for i in 0..parallelism {
+            let slice_start = i * slice_length;
+            let slice_end = total_length - (parallelism - i - 1) * slice_length;
+            let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
+            scope.spawn(move || {
+                apply_outcomes_for_slice(locations);
+            });
+        }
+    });
+}
+
+fn clean_up() {
+    unsafe {
+        for location in &LOCATIONS {
+            action_at_mut(location).take();
+            conflict_at_mut(location).clear(); // Why does replacing this with the proper clean-up seem to break things?
+            outcome_at_mut(location).take();
+        }
+        /*
+        for conflict in &mut CONFLICT_GRID {
+            conflict.clear();
+        }
+        */
+        LOCATIONS.clear();
+    }
+}
+
+fn determine_actions_for_slice(locations: &[Location]) {
     for location in locations {
         let entity = unsafe {
             WORLD.as_ref().unwrap().get_entity(location)
@@ -172,7 +179,7 @@ fn determine_actions_for_slice(locations: &[Location], conflicts: ConflictGrid) 
                 let conflict_location = unsafe {
                     WORLD.as_ref().unwrap().add(&entity.location, &direction)
                 };
-                conflicts.get(&conflict_location).add_from(&direction);
+                unsafe { conflict_at_mut(&conflict_location) }.add_from(&direction);
             }
         }
 
@@ -182,18 +189,17 @@ fn determine_actions_for_slice(locations: &[Location], conflicts: ConflictGrid) 
     }
 }
 
-fn resolve_conflicts_for_slice(locations: &[Location], conflicts: ConflictGrid, outcomes: OutcomeGrid) {
+fn resolve_conflicts_for_slice(locations: &[Location]) {
     for location in locations {
         let action = unsafe { action_at(location) }.as_ref()
             .expect("there should be an action at this location");
         match action.conflicting_directions() {
             None => {}
             Some(directions) => for direction in &directions {
-                let conflict_direction = unsafe {
-                    WORLD.as_ref().unwrap().add(location, direction)
-                };
-                if conflicts.get(&conflict_direction).is_conflicted() {
-                    outcomes.get(location).replace(Outcome::Blocked);
+                let conflict_direction = unsafe { WORLD.as_ref() }
+                    .unwrap().add(location, direction);
+                if unsafe { conflict_at(&conflict_direction) }.is_conflicted() {
+                    unsafe { outcome_at_mut(location) }.replace(Outcome::Blocked);
                     break;
                 }
             }
@@ -201,7 +207,7 @@ fn resolve_conflicts_for_slice(locations: &[Location], conflicts: ConflictGrid, 
     }
 }
 
-fn determine_outcomes_for_slice(locations: &[Location], outcomes: OutcomeGrid) {
+fn determine_outcomes_for_slice(locations: &[Location]) {
     for location in locations {
         let entity = unsafe {
             WORLD.as_ref().unwrap().get_entity(location)
@@ -209,17 +215,16 @@ fn determine_outcomes_for_slice(locations: &[Location], outcomes: OutcomeGrid) {
         };
         let action = unsafe { action_at(location) }.as_ref()
             .expect("there should be an action at this location");
-        if outcomes.get(location).is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
+        if unsafe { outcome_at(location) }.is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
             let outcome = action.resolve(entity, unsafe { WORLD.as_ref().unwrap() });
-            outcomes.get(location).replace(outcome);
+            unsafe { outcome_at_mut(location) }.replace(outcome);
         }
     }
 }
 
-fn apply_outcomes_for_slice(locations: &[Location], outcomes: OutcomeGrid) {
+fn apply_outcomes_for_slice(locations: &[Location]) {
     for location in locations {
-        let guard = outcomes.get(location);
-        let outcome = guard.as_ref()
+        let outcome = unsafe { outcome_at(location) }.as_ref()
             .expect("there should be an outcome at this location");
 
         apply_outcome_for_location(location, outcome);

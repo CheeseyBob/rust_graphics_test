@@ -49,7 +49,6 @@ use winit::window::WindowId;
 use crate::fps_counter::FpsCounter;
 use crate::graphics_window::{GraphicsWindow, WindowConfig};
 use crate::world::World;
-use crate::world_processor::WorldProcessor;
 
 
 fn main() {
@@ -86,8 +85,7 @@ fn main() {
 
     let mut world = World::new(width, height);
     load_test_world(&mut world, 50_000);
-
-    let mut world_processor = world_processor::init(world);
+    world_processor::init(world);
 
     let (mut graphics_window, event_loop) = GraphicsWindow::build(window_config);
 
@@ -103,7 +101,7 @@ fn main() {
             EventResponse::RedrawRequested(_) => graphics_window.redraw(),
             EventResponse::Tick => {
                 fps_counter.tick();
-                world_processor.step();
+                world_processor::step();
                 if draw_is_enabled {
                     world_processor::draw(&mut graphics_window.graphics_buffer());
                 }
