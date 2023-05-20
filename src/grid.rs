@@ -87,11 +87,16 @@ pub struct Location {
 impl Location {
     getter!(x: usize);
     getter!(y: usize);
+    getter!(index: usize);
 
     pub fn at<T>(x: usize, y: usize, grid: &Grid<T>) -> Location {
         let x = x % grid.width;
         let y = y % grid.height;
         let index = x + grid.width * y;
         Location { x, y, index }
+    }
+
+    pub const fn zero() -> Location {
+        Location { x: 0, y: 0, index: 0 }
     }
 }
