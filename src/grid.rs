@@ -2,7 +2,6 @@ use std::ops::Add;
 use std::slice::Iter;
 use parking_lot::{Mutex, MutexGuard, RawMutex};
 use crate::rng_buffer;
-use crate::rng_buffer::RngBuffer;
 
 pub struct Grid<T> {
     width: usize,

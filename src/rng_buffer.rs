@@ -1,54 +1,47 @@
-use std::sync::Arc;
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
+use std::thread;
 use rand::random;
 
-pub struct RngBuffer {
-    buffer: Vec<f64>,
-    capacity: usize,
-    next: usize,
-}
+const BUFFER_SIZE_U16: usize = 65536;
+static mut BUFFER_U16: [f64; BUFFER_SIZE_U16] = [0.0; BUFFER_SIZE_U16];
+static mut IS_INITIALIZED: bool = false;
+static mut NEXT: u16 = 0;
 
-fn create_buffer(capacity: usize) -> Vec<f64> {
-    let mut buffer = Vec::with_capacity(capacity);
-    for _ in 0..capacity {
-        buffer.push(random());
-    }
-    return buffer;
-}
-
-impl RngBuffer {
-    pub fn with_capacity(capacity: usize) -> RngBuffer {
-        RngBuffer {
-            capacity,
-            buffer: create_buffer(capacity), // TODO - Test if this works: vec![random(); capacity],
-            next: 0,
+pub fn init() {
+    unsafe {
+        for i in 0..BUFFER_SIZE_U16 {
+            BUFFER_U16[i] = random();
         }
     }
-
-    /// Return the next value in the RNG buffer. The values are between 0.0 and 1.0.
-    pub fn next(&mut self) -> f64 {
-        self.next = (self.next + 1) % self.capacity;
-        self.buffer[self.next]
-    }
-
-    /// Regenerate and return the next value in te RNG buffer.
-    /// Use this instead of `next()` only when you want to refresh the values in the buffer.
-    pub fn generate_next(&mut self) -> f64 {
-        self.next = (self.next + 1) % self.capacity;
-        self.buffer[self.next] = random();
-        self.buffer[self.next]
-    }
 }
 
-static DEFAULT: Lazy<Mutex<RngBuffer>> = Lazy::new(|| {
-    Mutex::new(RngBuffer::with_capacity(10_000))
-});
-
 pub fn generate_next() -> f64 {
-    DEFAULT.lock().generate_next()
+    increment();
+    regenerate();
+    read()
 }
 
 pub fn next() -> f64 {
-    DEFAULT.lock().next()
+    increment();
+    read()
+}
+
+fn increment() {
+    // Safety: TODO - Needs testing.
+    unsafe {
+        NEXT = NEXT.wrapping_add(1);
+    }
+}
+
+fn read() -> f64 {
+    // Safety: We don't care about data races here, as we are reading random values.
+    unsafe {
+        BUFFER_U16[NEXT as usize]
+    }
+}
+
+fn regenerate() {
+    // Safety: We don't care about data races here, as we are writing random values.
+    unsafe {
+        BUFFER_U16[NEXT as usize] = random();
+    }
 }
