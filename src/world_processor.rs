@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 use crate::graphics_window;
-use crate::graphics_window::Color;
+use crate::graphics_window::{Color, height, width};
 use crate::world::{Direction, Location, World};
 use crate::action::{Action, Outcome};
 
@@ -40,11 +40,11 @@ pub fn init(world: World) {
         WORLD = Some(world);
         LOCATIONS = Vec::with_capacity(size);
         ACTION_GRID = Vec::with_capacity(size);
-        ACTION_GRID.fill_with(|| { None });
+        ACTION_GRID.resize_with(size, || { None });
         CONFLICT_GRID = Vec::with_capacity(size);
-        CONFLICT_GRID.fill_with(|| { Conflict::none() });
+        CONFLICT_GRID.resize_with(size, || { Conflict::none() });
         OUTCOME_GRID = Vec::with_capacity(size);
-        OUTCOME_GRID.fill_with(|| { None });
+        OUTCOME_GRID.resize_with(size, || { None });
     }
 }
 
@@ -108,15 +108,14 @@ fn apply_outcomes() {
 }
 
 fn clean_up() {
-    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
-        unsafe {
-            action_at_mut(location).take();
-            conflict_at_mut(location).clear(); // Why does replacing this with the proper clean-up seem to break things?
-            outcome_at_mut(location).take();
-        }
-    });
-
     unsafe {
+        LOCATIONS.par_iter().for_each(|location| {
+            action_at_mut(location).take();
+            outcome_at_mut(location).take();
+        });
+        CONFLICT_GRID.par_iter_mut().for_each(|conflict| {
+            conflict.clear()
+        });
         LOCATIONS.clear();
     }
 }
@@ -231,14 +230,14 @@ impl Conflict {
     }
 
     fn clear(&mut self) {
-        self.south = false;
-        self.southwest = false;
-        self.west = false;
-        self.northwest = false;
         self.north = false;
         self.northeast = false;
         self.east = false;
         self.southeast = false;
+        self.south = false;
+        self.southwest = false;
+        self.west = false;
+        self.northwest = false;
     }
 
     fn is_conflicted(&self) -> bool {

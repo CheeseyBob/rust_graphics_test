@@ -117,6 +117,12 @@ impl Color {
     pub const BLACK: Color = Color::new(0, 0, 0);
     #[allow(unused)]
     pub const WHITE: Color = Color::new(255, 255, 255);
+    #[allow(unused)]
+    pub const RED: Color = Color::new(255, 0, 0);
+    #[allow(unused)]
+    pub const GREEN: Color = Color::new(0, 255, 0);
+    #[allow(unused)]
+    pub const BLUE: Color = Color::new(0, 0, 255);
 
     pub const fn new(r: u8, g: u8, b: u8) -> Color {
         Color(rgb_to_u32(r, g, b))
