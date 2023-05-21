@@ -2,43 +2,7 @@ use std::ops::Add;
 use std::slice::Iter;
 use parking_lot::{Mutex, MutexGuard, RawMutex};
 use crate::rng_buffer;
-
-pub struct Grid<T> {
-    width: usize,
-    height: usize,
-    grid: Vec<Mutex<T>>,
-}
-
-impl<T> Grid<T> {
-    getter!(width: usize);
-    getter!(height: usize);
-
-    pub fn new_filled_with<F>(mut f: F, width: usize, height: usize) -> Grid<T>
-        where F: FnMut() -> T {
-        Grid {
-            grid: init_vec_with(|| Mutex::new(f()), width * height),
-            width,
-            height,
-        }
-    }
-
-    pub fn get(&self, location: &Location) -> MutexGuard<'_, T> {
-        self.grid[location.index].lock()
-    }
-
-    pub fn add(&self, location: &Location, direction: &Direction) -> Location {
-        let x = location.x + self.width.checked_add_signed(direction.x()).expect("adding +1/-1 to width should not overflow");
-        let y = location.y + self.height.checked_add_signed(direction.y()).expect("adding +1/-1 to height should not overflow");
-        Location::at(x, y, &self)
-    }
-}
-
-fn init_vec_with<T, F>(mut f: F, capacity: usize) -> Vec<T>
-    where F: FnMut() -> T {
-    let mut vec: Vec<T> = Vec::with_capacity(capacity);
-    vec.resize_with(capacity, f);
-    return vec;
-}
+use crate::world::World;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Direction {
@@ -89,10 +53,10 @@ impl Location {
     getter!(y: usize);
     getter!(index: usize);
 
-    pub fn at<T>(x: usize, y: usize, grid: &Grid<T>) -> Location {
-        let x = x % grid.width;
-        let y = y % grid.height;
-        let index = x + grid.width * y;
+    pub fn at(x: usize, y: usize, world: &World) -> Location {
+        let x = x % world.width();
+        let y = y % world.height();
+        let index = x + world.width() * y;
         Location { x, y, index }
     }
 

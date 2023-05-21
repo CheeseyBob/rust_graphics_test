@@ -35,9 +35,6 @@ mod world;
 mod fps_counter;
 mod grid;
 mod world_processor;
-mod thread_pool;
-mod mutex_vec;
-mod mutex_vec_alt;
 
 use std::ops::Add;
 use std::sync::Arc;

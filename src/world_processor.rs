@@ -5,12 +5,9 @@ use std::thread;
 use rayon::prelude::*;
 use crate::graphics_window;
 use crate::graphics_window::Color;
-use crate::grid::{Direction, Grid, Location};
-use crate::thread_pool::ThreadPool;
+use crate::grid::{Direction, Location};
 use crate::world::{World};
 use crate::world::action::{Action, Outcome};
-
-const PARALLELISM: usize = 10;
 
 static mut WORLD: Option<World> = None;
 static mut LOCATIONS: Vec<Location> = Vec::new();
@@ -70,6 +67,8 @@ pub fn draw() {
 
 pub fn step() {
 
+    clean_up();
+
     get_locations_for_processing();
 
     determine_actions();
@@ -78,9 +77,7 @@ pub fn step() {
 
     determine_outcomes();
 
-    apply_outcomes();
-
-    clean_up();
+    apply_outcomes()
 }
 
 fn get_locations_for_processing() {
