@@ -2,7 +2,8 @@ use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use crate::graphics_window::GraphicsBuffer;
+use crate::graphics_window;
+use crate::graphics_window::Color;
 use crate::grid::{Direction, Grid, Location};
 use crate::thread_pool::ThreadPool;
 use crate::world::{World};
@@ -54,12 +55,33 @@ pub fn init(world: World) {
     }
 }
 
-pub fn draw(graphics_buffer: &mut GraphicsBuffer) {
-    unsafe {
-        if let Some(world) = &WORLD {
-            world.draw(graphics_buffer);
+pub fn draw() {
+    graphics_window::clear(Color::BLACK);
+    let entity_slices = unsafe { WORLD.as_ref() }
+        .unwrap()
+        .entity_slices(PARALLELISM);
+
+
+    thread::scope(|scope| {
+        for slice in entity_slices {
+            scope.spawn(move || {
+                for entity in slice {
+                    let location = &entity.location;
+                    let x = location.x();
+                    let y = location.y();
+                    let pixel_color = entity.pixel_color();
+                    graphics_window::draw_pixel(x, y, pixel_color);
+                }
+            });
         }
+    });
+
+    ////////////////////////
+    /*
+    if let Some(world) = unsafe { &WORLD } {
+        world.draw(graphics_buffer);
     }
+    */
 }
 
 pub fn step() {

@@ -87,7 +87,7 @@ fn main() {
     load_test_world(&mut world, 50_000);
     world_processor::init(world);
 
-    let (mut graphics_window, event_loop) = GraphicsWindow::build(window_config);
+    let (mut graphics_window, event_loop) = graphics_window::build_graphics_window(window_config);
 
     event_loop.run(move |event, _, control_flow| {
 
@@ -103,7 +103,7 @@ fn main() {
                 fps_counter.tick();
                 world_processor::step();
                 if draw_is_enabled {
-                    world_processor::draw(&mut graphics_window.graphics_buffer());
+                    world_processor::draw();
                 }
                 graphics_window.window().request_redraw();
             }

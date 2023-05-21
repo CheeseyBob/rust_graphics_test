@@ -3,6 +3,18 @@ use winit::dpi::PhysicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
+static mut PIXEL_BUFFER: Vec<u32> = Vec::new();
+static mut WIDTH: usize = 0;
+static mut HEIGHT: usize = 0;
+
+pub fn width() -> usize {
+    unsafe { WIDTH }
+}
+
+pub fn height() -> usize {
+    unsafe { HEIGHT }
+}
+
 pub struct WindowConfig {
     pub title: String,
     pub resizable: bool,
@@ -26,7 +38,6 @@ impl WindowConfig {
 pub struct GraphicsWindow {
     window: Window,
     graphics_context: GraphicsContext,
-    graphics_buffer: GraphicsBuffer,
 }
 
 fn build_window(event_loop: &EventLoop<()>, config: &WindowConfig) -> Window {
@@ -37,64 +48,53 @@ fn build_window(event_loop: &EventLoop<()>, config: &WindowConfig) -> Window {
     )
 }
 
+pub fn build_graphics_window(config: WindowConfig) -> (GraphicsWindow, EventLoop<()>) {
+    let event_loop = EventLoop::new();
+    let window = build_window(&event_loop, &config);
+    let buffer_size = config.width * config.height;
+    unsafe {
+        PIXEL_BUFFER = vec![0; buffer_size as usize];
+        WIDTH = config.width as usize;
+        HEIGHT = config.height as usize;
+    }
+    let graphics_window = GraphicsWindow {
+        graphics_context: unsafe { GraphicsContext::new(&window, &window) }.unwrap(),
+        window,
+    };
+    return (graphics_window, event_loop);
+}
+
 impl GraphicsWindow {
     getter_ref!(window: Window);
-    getter_mut!(graphics_buffer: GraphicsBuffer);
-
-    pub fn build(config: WindowConfig) -> (GraphicsWindow, EventLoop<()>) {
-        let event_loop = EventLoop::new();
-        let window = build_window(&event_loop, &config);
-        let graphics_window = GraphicsWindow {
-            graphics_context: unsafe { GraphicsContext::new(&window, &window) }.unwrap(),
-            graphics_buffer: GraphicsBuffer::new(&config),
-            window,
-        };
-        return (graphics_window, event_loop);
-    }
 
     pub fn redraw(&mut self) {
-        self.graphics_buffer.redraw(&mut self.graphics_context);
+        redraw(&mut self.graphics_context);
     }
 }
 
-pub struct GraphicsBuffer {
-    pixel_buffer: Vec<u32>,
-    width: usize,
-    height: usize,
+pub fn clear(color: Color) {
+
+    // TODO - Test a few solutions to find a reasonably performant one.
+    //self.pixel_buffer.iter_mut().for_each(|px| *px = 0);
+
+    unsafe {
+        PIXEL_BUFFER.set_all(color.0);
+    }
+
+    //self.pixel_buffer[index as usize] = color.to_u32();
 }
 
-impl GraphicsBuffer {
-    getter!(height: usize);
-    getter!(width: usize);
-
-    fn new(config: &WindowConfig) -> Self {
-        let buffer_size = config.width * config.height;
-        Self {
-            pixel_buffer: vec![0; buffer_size as usize],
-            width: config.width as usize,
-            height: config.height as usize,
-        }
-    }
-
-    pub fn clear(&mut self, color: Color) {
-
-        // TODO - Test a few solutions to find a reasonably performant one.
-        //self.pixel_buffer.iter_mut().for_each(|px| *px = 0);
-
-        self.pixel_buffer.set_all(color.0);
-
-        //self.pixel_buffer[index as usize] = color.to_u32();
-    }
-
-    pub fn draw_pixel(&mut self, x: usize, y: usize, color: Color) {
-        let index = x + self.width * y;
-        self.pixel_buffer[index] = color.0;
-    }
-
-    fn redraw(&self, graphics_context: &mut GraphicsContext) {
-        graphics_context.set_buffer(&self.pixel_buffer, self.width as u16, self.height as u16);
+pub fn draw_pixel(x: usize, y: usize, color: Color) {
+    let index = x + width() * y;
+    unsafe {
+        PIXEL_BUFFER[index] = color.0;
     }
 }
+
+fn redraw(graphics_context: &mut GraphicsContext) {
+    graphics_context.set_buffer(unsafe { &PIXEL_BUFFER }, width() as u16, height() as u16);
+}
+
 
 /*************************************************************/
 // Allows calling .set_all(some_value) on an array to set all values in the array to some_value.

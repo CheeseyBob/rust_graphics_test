@@ -1,12 +1,12 @@
 use std::ops::Deref;
 use std::slice::Iter;
-use crate::graphics_window::{Color, GraphicsBuffer};
+use crate::graphics_window::Color;
 use crate::grid::{Direction, Grid, Location};
 use crate::world::entity::Entity;
 
 pub mod entity {
     use std::sync::Arc;
-    use crate::graphics_window::{Color, GraphicsBuffer};
+    use crate::graphics_window::Color;
     use crate::grid::{Direction, Location};
     use crate::rng_buffer;
     use crate::world::action::Action;
@@ -18,8 +18,8 @@ pub mod entity {
     }
 
     impl Entity {
-        pub fn draw(&self, graphics: &mut GraphicsBuffer) {
-            graphics.draw_pixel(self.location.x(), self.location.y(), Color::WHITE);
+        pub fn pixel_color(&self) -> Color {
+            Color::WHITE
         }
 
         pub fn new(x: usize, y: usize, world: &World) -> Entity {
@@ -113,11 +113,6 @@ impl World {
 
     pub fn add(&self, location: &Location, direction: &Direction) -> Location {
         self.entity_grid.add(location, direction)
-    }
-
-    pub fn draw(&self, graphics: &mut GraphicsBuffer) {
-        graphics.clear(Color::BLACK);
-        self.entities.iter().for_each(f!{entity -> entity.draw(graphics)});
     }
 
     pub fn get_entity(&self, location: &Location) -> Option<&Entity> {
