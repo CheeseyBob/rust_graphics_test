@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 use crate::graphics_window;
-use crate::graphics_window::{Color, height, width};
+use crate::graphics_window::Color;
 use crate::world::{Direction, Location, World};
 use crate::action::{Action, Outcome};
 
@@ -9,6 +9,7 @@ static mut LOCATIONS: Vec<Location> = Vec::new();
 static mut ACTION_GRID: Vec<Option<Action>> = Vec::new();
 static mut CONFLICT_GRID: Vec<Conflict> = Vec::new();
 static mut OUTCOME_GRID: Vec<Option<Outcome>> = Vec::new();
+static mut DRAWING_ENABLED: bool = true;
 
 unsafe fn action_at(location: &Location) -> &Option<Action> {
     ACTION_GRID.get_unchecked(location.index())
@@ -34,6 +35,10 @@ unsafe fn outcome_at_mut(location: &Location) -> &mut Option<Outcome> {
     OUTCOME_GRID.get_unchecked_mut(location.index())
 }
 
+fn is_drawing_enabled() -> bool {
+    unsafe { DRAWING_ENABLED }
+}
+
 pub fn init(world: World) {
     let size = world.width() * world.height();
     unsafe {
@@ -49,6 +54,8 @@ pub fn init(world: World) {
 }
 
 pub fn draw() {
+    if !is_drawing_enabled() { return }
+
     graphics_window::clear(Color::BLACK);
 
     unsafe { WORLD.as_ref() }.unwrap().iter_entities_par().for_each(|entity| {
@@ -62,6 +69,10 @@ pub fn draw() {
 
 pub fn step() {
 
+    let draw_thread = std::thread::spawn(|| {
+        draw();
+    });
+
     clean_up();
 
     get_locations_for_processing();
@@ -71,6 +82,8 @@ pub fn step() {
     resolve_conflicts();
 
     determine_outcomes();
+
+    draw_thread.join().unwrap();
 
     apply_outcomes()
 }

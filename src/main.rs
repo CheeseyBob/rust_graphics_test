@@ -57,7 +57,6 @@ fn main() {
 
     /**********************************************************************************************/
 
-    let draw_is_enabled = true;
     let (width, height) = (1800, 900);
     let window_config: WindowConfig = WindowConfig {
         title: String::from("Test"),
@@ -92,9 +91,6 @@ fn main() {
             EventResponse::Tick => {
                 fps_counter.tick();
                 world_processor::step();
-                if draw_is_enabled {
-                    world_processor::draw();
-                }
                 graphics_window.window().request_redraw();
             }
             EventResponse::None => {}
