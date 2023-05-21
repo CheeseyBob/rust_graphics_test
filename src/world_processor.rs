@@ -11,6 +11,14 @@ static mut CONFLICT_GRID: Vec<Conflict> = Vec::new();
 static mut OUTCOME_GRID: Vec<Option<Outcome>> = Vec::new();
 static mut DRAWING_ENABLED: bool = true;
 
+fn is_drawing_enabled() -> bool {
+    unsafe { DRAWING_ENABLED }
+}
+
+fn is_initialised() -> bool {
+    unsafe { WORLD.is_some() }
+}
+
 unsafe fn action_at(location: &Location) -> &Option<Action> {
     ACTION_GRID.get_unchecked(location.index())
 }
@@ -35,11 +43,9 @@ unsafe fn outcome_at_mut(location: &Location) -> &mut Option<Outcome> {
     OUTCOME_GRID.get_unchecked_mut(location.index())
 }
 
-fn is_drawing_enabled() -> bool {
-    unsafe { DRAWING_ENABLED }
-}
+pub fn init(world: World) -> Result<(), ()> {
+    if is_initialised() { return Err(()) }
 
-pub fn init(world: World) {
     let size = world.width() * world.height();
     unsafe {
         WORLD = Some(world);
@@ -51,14 +57,16 @@ pub fn init(world: World) {
         OUTCOME_GRID = Vec::with_capacity(size);
         OUTCOME_GRID.resize_with(size, || { None });
     }
+    Ok(())
 }
 
-pub fn draw() {
+/// Safety: Don't call while WORLD is being mutated.
+pub unsafe fn draw() {
     if !is_drawing_enabled() { return }
 
     graphics_window::clear(Color::BLACK);
 
-    unsafe { WORLD.as_ref() }.unwrap().iter_entities_par().for_each(|entity| {
+    WORLD.as_ref().unwrap().iter_entities_par().for_each(|entity| {
         let location = &entity.location;
         let x = location.x();
         let y = location.y();
@@ -68,124 +76,144 @@ pub fn draw() {
 }
 
 pub fn step() {
-
-    let draw_thread = std::thread::spawn(|| {
-        draw();
-    });
-
-    clean_up();
-
-    get_locations_for_processing();
-
-    determine_actions();
-
-    resolve_conflicts();
-
-    determine_outcomes();
-
-    draw_thread.join().unwrap();
-
-    apply_outcomes()
-}
-
-fn get_locations_for_processing() {
     unsafe {
-        LOCATIONS = WORLD.as_ref().unwrap().iter_entities_par()
-            .map(|entity| entity.location)
-            .collect();
+        let draw_thread = std::thread::spawn(|| {
+            // Safety:
+            // Reads: WORLD
+            // Mutates: -
+            draw();
+        });
+
+        // Safety:
+        // Reads: -
+        // Mutates: LOCATIONS, ACTION_GRID, CONFLICT_GRID, OUTCOME_GRID
+        clean_up();
+
+        // Safety:
+        // Reads: WORLD
+        // Mutates: LOCATIONS
+        get_locations_for_processing();
+
+        // Safety:
+        // Reads: LOCATIONS, WORLD
+        // Mutates: ACTION_GRID, CONFLICT_GRID
+        determine_actions();
+
+        // Safety:
+        // Reads: LOCATIONS, ACTION_GRID, CONFLICT_GRID
+        // Mutates: OUTCOME_GRID
+        resolve_conflicts();
+
+        // Safety:
+        // Reads: LOCATIONS, WORLD, ACTION_GRID
+        // Mutates: OUTCOME_GRID
+        determine_outcomes();
+
+        // Safety: WORLD will no longer be read by draw thread.
+        draw_thread.join().unwrap();
+
+        // Safety:
+        // Reads: LOCATIONS, OUTCOME_GRID
+        // Mutates: WORLD
+        apply_outcomes()
     }
 }
 
-fn determine_actions() {
-    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+/// Safety: This function mutates LOCATIONS, ACTION_GRID, CONFLICT_GRID and OUTCOME_GRID.
+unsafe fn clean_up() {
+    LOCATIONS.par_iter().for_each(|location| {
+        action_at_mut(location).take();
+        outcome_at_mut(location).take();
+    });
+    CONFLICT_GRID.par_iter_mut().for_each(|conflict| {
+        conflict.clear()
+    });
+    LOCATIONS.clear();
+}
+
+/// Safety: This function reads from WORLD and mutates LOCATIONS;
+unsafe fn get_locations_for_processing() {
+    LOCATIONS = WORLD.as_ref().unwrap().iter_entities_par()
+        .map(|entity| entity.location)
+        .collect();
+}
+
+/// Safety: This function reads from LOCATIONS and WORLD and mutates ACTION_GRID and CONFLICT_GRID.
+unsafe fn determine_actions() {
+    LOCATIONS.par_iter().for_each(|location| {
         determine_action_for_location(location);
     });
 }
 
-fn resolve_conflicts() {
-    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+/// Safety: This function reads from LOCATIONS, ACTION_GRID and CONFLICT_GRID and mutates OUTCOME_GRID.
+unsafe fn resolve_conflicts() {
+    LOCATIONS.par_iter().for_each(|location| {
         resolve_conflicts_for_location(location);
     });
 }
 
-fn determine_outcomes() {
-    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+/// Safety: This function reads from LOCATIONS, WORLD and ACTION_GRID and mutates OUTCOME_GRID.
+unsafe fn determine_outcomes() {
+    LOCATIONS.par_iter().for_each(|location| {
         determine_outcomes_for_location(location);
     });
 }
 
-fn apply_outcomes() {
-    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+/// Safety: This function reads from LOCATIONS and OUTCOME_GRID and mutates WORLD.
+unsafe fn apply_outcomes() {
+    LOCATIONS.par_iter().for_each(|location| {
         apply_outcome_for_location(location);
     });
 }
 
-fn clean_up() {
-    unsafe {
-        LOCATIONS.par_iter().for_each(|location| {
-            action_at_mut(location).take();
-            outcome_at_mut(location).take();
-        });
-        CONFLICT_GRID.par_iter_mut().for_each(|conflict| {
-            conflict.clear()
-        });
-        LOCATIONS.clear();
-    }
-}
-
-fn determine_action_for_location(location: &Location) {
-    let entity = unsafe {
-        WORLD.as_ref().unwrap().get_entity(location)
-            .expect("entity should be at this location")
-    };
-    let action = entity.determine_action(unsafe { WORLD.as_ref().unwrap() });
+/// Safety: This function reads from WORLD and mutates ACTION_GRID and CONFLICT_GRID.
+unsafe fn determine_action_for_location(location: &Location) {
+    let entity =WORLD.as_ref().unwrap().get_entity(location)
+            .expect("entity should be at this location");
+    let action = entity.determine_action(WORLD.as_ref().unwrap());
 
     match action.conflicting_directions() {
         None => {}
         Some(directions) => for direction in directions {
-            let conflict_location = unsafe {
-                WORLD.as_ref().unwrap().add(&entity.location, &direction)
-            };
-            unsafe { conflict_at_mut(&conflict_location) }.add_from(&direction);
+            let conflict_location = WORLD.as_ref().unwrap().add(&entity.location, &direction);
+           conflict_at_mut(&conflict_location).add_from(&direction);
         }
     }
 
-    unsafe {
-        action_at_mut(&entity.location).replace(action);
-    }
+    action_at_mut(&entity.location).replace(action);
 }
 
-fn resolve_conflicts_for_location(location: &Location) {
-    let action = unsafe { action_at(location) }.as_ref()
+/// Safety: This function reads from ACTION_GRID and CONFLICT_GRID and mutates OUTCOME_GRID.
+unsafe fn resolve_conflicts_for_location(location: &Location) {
+    let action = action_at(location).as_ref()
         .expect("there should be an action at this location");
     match action.conflicting_directions() {
         None => {}
         Some(directions) => for direction in &directions {
-            let conflict_direction = unsafe { WORLD.as_ref() }
-                .unwrap().add(location, direction);
-            if unsafe { conflict_at(&conflict_direction) }.is_conflicted() {
-                unsafe { outcome_at_mut(location) }.replace(Outcome::Blocked);
+            let conflict_direction = WORLD.as_ref().unwrap().add(location, direction);
+            if conflict_at(&conflict_direction).is_conflicted() {
+                outcome_at_mut(location).replace(Outcome::Blocked);
                 break;
             }
         }
     }
 }
 
-fn determine_outcomes_for_location(location: &Location) {
-    let entity = unsafe {
-        WORLD.as_ref().unwrap().get_entity(location)
-            .expect("entity should be at this location")
-    };
-    let action = unsafe { action_at(location) }.as_ref()
+/// Safety: This function reads from WORLD and ACTION_GRID and mutates OUTCOME_GRID.
+unsafe fn determine_outcomes_for_location(location: &Location) {
+    let entity = WORLD.as_ref().unwrap().get_entity(location)
+            .expect("entity should be at this location");
+    let action = action_at(location).as_ref()
         .expect("there should be an action at this location");
-    if unsafe { outcome_at(location) }.is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
-        let outcome = action.resolve(entity, unsafe { WORLD.as_ref().unwrap() });
-        unsafe { outcome_at_mut(location) }.replace(outcome);
+    if outcome_at(location).is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
+        let outcome = action.resolve(entity, WORLD.as_ref().unwrap());
+        outcome_at_mut(location).replace(outcome);
     }
 }
 
-fn apply_outcome_for_location(location: &Location) {
-    let outcome = unsafe { outcome_at(location) }.as_ref()
+/// Safety: This function reads from OUTCOME_GRID and mutates WORLD.
+unsafe fn apply_outcome_for_location(location: &Location) {
+    let outcome = outcome_at(location).as_ref()
         .expect("there should be an outcome at this location");
 
     match outcome {
@@ -196,18 +224,16 @@ fn apply_outcome_for_location(location: &Location) {
     }
 }
 
-fn resolve_move(location: &Location, direction: &Direction) {
-    unsafe {
-        WORLD.as_mut().unwrap().move_entity(location, direction)
+/// Safety: This function mutates WORLD.
+unsafe fn resolve_move(location: &Location, direction: &Direction) {
+    WORLD.as_mut().unwrap().move_entity(location, direction)
             .expect("entity should be at location and destination should be unoccupied");
-    }
 }
 
-fn resolve_turn(location: &Location, facing: &Direction) {
-    let mut entity = unsafe {
-        WORLD.as_mut().unwrap().get_entity_mut(location)
-            .expect("entity should be at this location")
-    };
+/// Safety: This function mutates WORLD.
+unsafe fn resolve_turn(location: &Location, facing: &Direction) {
+    let mut entity = WORLD.as_mut().unwrap().get_entity_mut(location)
+            .expect("entity should be at this location");
     entity.facing = *facing;
 }
 

@@ -74,7 +74,7 @@ fn main() {
 
     let mut world = World::new(width, height);
     load_test_world(&mut world, 50_000);
-    world_processor::init(world);
+    world_processor::init(world).unwrap();
 
     let (mut graphics_window, event_loop) = graphics_window::build_graphics_window(window_config);
 
