@@ -1,6 +1,6 @@
 use std::ops::Deref;
-use std::slice::Iter;
 use rayon::prelude::*;
+use rayon::slice::{Iter, Windows};
 use crate::graphics_window::Color;
 use crate::grid::{Direction, Grid, Location};
 use crate::world::entity::Entity;
@@ -134,37 +134,12 @@ impl World {
         }
     }
 
-    pub fn iter_entities(&self) -> Iter<'_, Entity> {
-        self.entities.iter()
-    }
-
-    pub fn iter_entities_par(&self) -> rayon::slice::Iter<Entity> {
+    pub fn iter_entities_par(&self) -> Iter<Entity> {
         self.entities.par_iter()
     }
 
     pub fn num_entities(&self) -> usize {
         self.entities.len()
-    }
-
-    pub fn entity_slices(&self, parallelism: usize) -> Vec<&[Entity]> {
-        let mut slices = Vec::with_capacity(parallelism);
-        let total_length = self.entities.len();
-
-        for i in 0..parallelism {
-            let slice_start = (i * total_length) / parallelism;
-            let slice_end = ((i + 1) * total_length) / parallelism;
-            let slice_length = slice_end - slice_start;
-
-            let slice_start_pointer = unsafe {
-                self.entities.as_ptr().add(slice_start)
-            };
-
-            let slice = unsafe {
-                std::slice::from_raw_parts(slice_start_pointer, slice_length)
-            };
-            slices.push(slice);
-        }
-        return slices;
     }
 
     pub fn move_entity(&mut self, location: &Location, direction: &Direction) -> Result<(), ()> {

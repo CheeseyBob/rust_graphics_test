@@ -38,7 +38,6 @@ mod world_processor;
 mod thread_pool;
 mod mutex_vec;
 mod mutex_vec_alt;
-mod multithreading;
 
 use std::ops::Add;
 use std::sync::Arc;

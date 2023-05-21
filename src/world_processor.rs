@@ -85,9 +85,9 @@ pub fn step() {
 
 fn get_locations_for_processing() {
     unsafe {
-        for entity in WORLD.as_ref().unwrap().iter_entities() {
-            LOCATIONS.push(entity.location);
-        }
+        LOCATIONS = WORLD.as_ref().unwrap().iter_entities_par()
+            .map(|entity| entity.location)
+            .collect();
     }
 }
 
