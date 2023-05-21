@@ -2,6 +2,7 @@ use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use rayon::prelude::*;
 use crate::graphics_window;
 use crate::graphics_window::Color;
 use crate::grid::{Direction, Grid, Location};
@@ -101,122 +102,88 @@ fn get_locations_for_processing() {
 }
 
 fn determine_actions() {
-    thread::scope(|scope| {
-        let parallelism = PARALLELISM;
-        let total_length = unsafe { LOCATIONS.len() };
-        let slice_length = total_length / parallelism;
-        for i in 0..parallelism {
-            let slice_start = i * slice_length;
-            let slice_end = total_length - (parallelism - i - 1) * slice_length;
-                let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-            scope.spawn(move || {
-                determine_actions_for_slice(locations);
-            });
-        }
+    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+        determine_action_for_location(location);
     });
 }
 
 fn resolve_conflicts() {
-    thread::scope(|scope| {
-        let parallelism = PARALLELISM;
-        let total_length = unsafe { LOCATIONS.len() };
-        let slice_length = total_length / parallelism;
-        for i in 0..parallelism {
-            let slice_start = i * slice_length;
-            let slice_end = total_length - (parallelism - i - 1) * slice_length;
-            let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-            scope.spawn(move || {
-                resolve_conflicts_for_slice(locations);
-            });
-        }
+    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+        resolve_conflicts_for_location(location);
     });
 }
 
 fn determine_outcomes() {
-    thread::scope(|scope| {
-        let parallelism = PARALLELISM;
-        let total_length = unsafe { LOCATIONS.len() };
-        let slice_length = total_length / parallelism;
-        for i in 0..parallelism {
-            let slice_start = i * slice_length;
-            let slice_end = total_length - (parallelism - i - 1) * slice_length;
-            let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-            scope.spawn(move || {
-                determine_outcomes_for_slice(locations);
-            });
-        }
+    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+        determine_outcomes_for_location(location);
     });
 }
 
 fn apply_outcomes() {
-    thread::scope(|scope| {
-        let parallelism = PARALLELISM;
-        let total_length = unsafe { LOCATIONS.len() };
-        let slice_length = total_length / parallelism;
-        for i in 0..parallelism {
-            let slice_start = i * slice_length;
-            let slice_end = total_length - (parallelism - i - 1) * slice_length;
-            let locations = unsafe { &LOCATIONS[slice_start..slice_end] };
-            scope.spawn(move || {
-                apply_outcomes_for_slice(locations);
-            });
-        }
+    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+        apply_outcome_for_location(location);
     });
 }
 
 fn clean_up() {
-    unsafe {
-        for location in &LOCATIONS {
+    unsafe { &LOCATIONS }.par_iter().for_each(|location| {
+        unsafe {
             action_at_mut(location).take();
             conflict_at_mut(location).clear(); // Why does replacing this with the proper clean-up seem to break things?
             outcome_at_mut(location).take();
         }
-        /*
-        for conflict in &mut CONFLICT_GRID {
-            conflict.clear();
-        }
-        */
+    });
+
+    unsafe {
         LOCATIONS.clear();
     }
 }
 
 fn determine_actions_for_slice(locations: &[Location]) {
     for location in locations {
-        let entity = unsafe {
-            WORLD.as_ref().unwrap().get_entity(location)
-                .expect("entity should be at this location")
-        };
-        let action = entity.determine_action(unsafe { WORLD.as_ref().unwrap() });
+        determine_action_for_location(location);
+    }
+}
 
-        match action.conflicting_directions() {
-            None => {}
-            Some(directions) => for direction in directions {
-                let conflict_location = unsafe {
-                    WORLD.as_ref().unwrap().add(&entity.location, &direction)
-                };
-                unsafe { conflict_at_mut(&conflict_location) }.add_from(&direction);
-            }
-        }
+fn determine_action_for_location(location: &Location) {
+    let entity = unsafe {
+        WORLD.as_ref().unwrap().get_entity(location)
+            .expect("entity should be at this location")
+    };
+    let action = entity.determine_action(unsafe { WORLD.as_ref().unwrap() });
 
-        unsafe {
-            action_at_mut(&entity.location).replace(action);
+    match action.conflicting_directions() {
+        None => {}
+        Some(directions) => for direction in directions {
+            let conflict_location = unsafe {
+                WORLD.as_ref().unwrap().add(&entity.location, &direction)
+            };
+            unsafe { conflict_at_mut(&conflict_location) }.add_from(&direction);
         }
+    }
+
+    unsafe {
+        action_at_mut(&entity.location).replace(action);
     }
 }
 
 fn resolve_conflicts_for_slice(locations: &[Location]) {
     for location in locations {
-        let action = unsafe { action_at(location) }.as_ref()
-            .expect("there should be an action at this location");
-        match action.conflicting_directions() {
-            None => {}
-            Some(directions) => for direction in &directions {
-                let conflict_direction = unsafe { WORLD.as_ref() }
-                    .unwrap().add(location, direction);
-                if unsafe { conflict_at(&conflict_direction) }.is_conflicted() {
-                    unsafe { outcome_at_mut(location) }.replace(Outcome::Blocked);
-                    break;
-                }
+        resolve_conflicts_for_location(location);
+    }
+}
+
+fn resolve_conflicts_for_location(location: &Location) {
+    let action = unsafe { action_at(location) }.as_ref()
+        .expect("there should be an action at this location");
+    match action.conflicting_directions() {
+        None => {}
+        Some(directions) => for direction in &directions {
+            let conflict_direction = unsafe { WORLD.as_ref() }
+                .unwrap().add(location, direction);
+            if unsafe { conflict_at(&conflict_direction) }.is_conflicted() {
+                unsafe { outcome_at_mut(location) }.replace(Outcome::Blocked);
+                break;
             }
         }
     }
@@ -224,29 +191,33 @@ fn resolve_conflicts_for_slice(locations: &[Location]) {
 
 fn determine_outcomes_for_slice(locations: &[Location]) {
     for location in locations {
-        let entity = unsafe {
-            WORLD.as_ref().unwrap().get_entity(location)
-                .expect("entity should be at this location")
-        };
-        let action = unsafe { action_at(location) }.as_ref()
-            .expect("there should be an action at this location");
-        if unsafe { outcome_at(location) }.is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
-            let outcome = action.resolve(entity, unsafe { WORLD.as_ref().unwrap() });
-            unsafe { outcome_at_mut(location) }.replace(outcome);
-        }
+        determine_outcomes_for_location(location);
+    }
+}
+
+fn determine_outcomes_for_location(location: &Location) {
+    let entity = unsafe {
+        WORLD.as_ref().unwrap().get_entity(location)
+            .expect("entity should be at this location")
+    };
+    let action = unsafe { action_at(location) }.as_ref()
+        .expect("there should be an action at this location");
+    if unsafe { outcome_at(location) }.is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
+        let outcome = action.resolve(entity, unsafe { WORLD.as_ref().unwrap() });
+        unsafe { outcome_at_mut(location) }.replace(outcome);
     }
 }
 
 fn apply_outcomes_for_slice(locations: &[Location]) {
     for location in locations {
-        let outcome = unsafe { outcome_at(location) }.as_ref()
-            .expect("there should be an outcome at this location");
-
-        apply_outcome_for_location(location, outcome);
+        apply_outcome_for_location(location);
     }
 }
 
-fn apply_outcome_for_location(location: &Location, outcome: &Outcome) {
+fn apply_outcome_for_location(location: &Location) {
+    let outcome = unsafe { outcome_at(location) }.as_ref()
+        .expect("there should be an outcome at this location");
+
     match outcome {
         Outcome::Wait => {}
         Outcome::Move(direction) => resolve_move(location, direction),
