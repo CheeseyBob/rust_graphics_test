@@ -6,9 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-softbuffer = "0.2.0"
-winit = "0.28.3"
-rand = "0.8.5"  # For RNG
-nalgebra = "0.32.2"  # For linear algebra
-parking_lot = "0.12"  # TODO - remove
-rayon = "1.7.0"  # For multi-threading
+winit = "0.28.3"  # For windows.
+softbuffer = "0.2.0"  # For 2D graphics buffer with winit.
+rand = "0.8.5"  # For RNG.
+nalgebra = "0.32.2"  # For linear algebra.
+rayon = "1.7.0"  # For multi-threading.

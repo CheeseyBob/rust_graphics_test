@@ -1,13 +1,5 @@
-/// Defines a lambda function.
-///
-/// `f!{x -> y}` outputs: `|x| y`
-macro_rules! f {
-    {$var:ident -> $def:expr} => {
-        |$var| $def
-    };
-}
-
 /// Creates a public getter function for given (Copy) field.
+#[allow(unused)]
 macro_rules! getter {
     ($var:ident: $t:ty) => {
         pub fn $var(&self) -> $t { self.$var }
@@ -15,6 +7,7 @@ macro_rules! getter {
 }
 
 /// Creates a public reference-getter function for given field.
+#[allow(unused)]
 macro_rules! getter_mut {
     ($var:ident: $typ:ty) => {
         pub fn $var(&mut self) -> &mut $typ { &mut self.$var }
@@ -22,6 +15,7 @@ macro_rules! getter_mut {
 }
 
 /// Creates a public reference-getter function for given field.
+#[allow(unused)]
 macro_rules! getter_ref {
     ($var:ident: $typ:ty) => {
         pub fn $var(&self) -> &$typ { &self.$var }
@@ -33,17 +27,17 @@ mod rng_buffer;
 mod matrix_test;
 mod world;
 mod fps_counter;
-mod grid;
 mod world_processor;
+mod entity;
+mod action;
 
 use std::ops::Add;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::event::{Event, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow};
 use winit::window::WindowId;
 use crate::fps_counter::FpsCounter;
-use crate::graphics_window::{GraphicsWindow, WindowConfig};
+use crate::graphics_window::WindowConfig;
 use crate::world::World;
 
 
@@ -134,7 +128,7 @@ fn load_test_world(world: &mut World, entity_count: u32) {
     while count < entity_count {
         let x = (rng_buffer::generate_next() * world.width() as f64) as usize;
         let y = (rng_buffer::next() * world.height() as f64) as usize;
-        let entity = world::entity::Entity::new(x, y, &world);
+        let entity = entity::Entity::new(x, y, &world);
         if world.place_entity(entity).is_ok() {
             count += 1;
         }

@@ -1,13 +1,8 @@
-use std::num::NonZeroUsize;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex};
-use std::thread;
 use rayon::prelude::*;
 use crate::graphics_window;
 use crate::graphics_window::Color;
-use crate::grid::{Direction, Location};
-use crate::world::{World};
-use crate::world::action::{Action, Outcome};
+use crate::world::{Direction, Location, World};
+use crate::action::{Action, Outcome};
 
 static mut WORLD: Option<World> = None;
 static mut LOCATIONS: Vec<Location> = Vec::new();
@@ -126,12 +121,6 @@ fn clean_up() {
     }
 }
 
-fn determine_actions_for_slice(locations: &[Location]) {
-    for location in locations {
-        determine_action_for_location(location);
-    }
-}
-
 fn determine_action_for_location(location: &Location) {
     let entity = unsafe {
         WORLD.as_ref().unwrap().get_entity(location)
@@ -154,12 +143,6 @@ fn determine_action_for_location(location: &Location) {
     }
 }
 
-fn resolve_conflicts_for_slice(locations: &[Location]) {
-    for location in locations {
-        resolve_conflicts_for_location(location);
-    }
-}
-
 fn resolve_conflicts_for_location(location: &Location) {
     let action = unsafe { action_at(location) }.as_ref()
         .expect("there should be an action at this location");
@@ -176,12 +159,6 @@ fn resolve_conflicts_for_location(location: &Location) {
     }
 }
 
-fn determine_outcomes_for_slice(locations: &[Location]) {
-    for location in locations {
-        determine_outcomes_for_location(location);
-    }
-}
-
 fn determine_outcomes_for_location(location: &Location) {
     let entity = unsafe {
         WORLD.as_ref().unwrap().get_entity(location)
@@ -192,12 +169,6 @@ fn determine_outcomes_for_location(location: &Location) {
     if unsafe { outcome_at(location) }.is_none() { // Otherwise the outcome here is from conflict resolution, which takes precedence.
         let outcome = action.resolve(entity, unsafe { WORLD.as_ref().unwrap() });
         unsafe { outcome_at_mut(location) }.replace(outcome);
-    }
-}
-
-fn apply_outcomes_for_slice(locations: &[Location]) {
-    for location in locations {
-        apply_outcome_for_location(location);
     }
 }
 

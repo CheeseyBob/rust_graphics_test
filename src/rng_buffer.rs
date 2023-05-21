@@ -1,9 +1,7 @@
-use std::thread;
 use rand::random;
 
 const BUFFER_SIZE_U16: usize = 65536;
 static mut BUFFER_U16: [f64; BUFFER_SIZE_U16] = [0.0; BUFFER_SIZE_U16];
-static mut IS_INITIALIZED: bool = false;
 static mut NEXT: u16 = 0;
 
 pub fn init() {

@@ -29,10 +29,6 @@ impl WindowConfig {
         window.set_inner_size(PhysicalSize::new(self.width, self.height));
         return window;
     }
-
-    pub fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
-    }
 }
 
 pub struct GraphicsWindow {
