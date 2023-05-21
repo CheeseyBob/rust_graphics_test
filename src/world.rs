@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::slice::Iter;
+use rayon::prelude::*;
 use crate::graphics_window::Color;
 use crate::grid::{Direction, Grid, Location};
 use crate::world::entity::Entity;
@@ -135,6 +136,10 @@ impl World {
 
     pub fn iter_entities(&self) -> Iter<'_, Entity> {
         self.entities.iter()
+    }
+
+    pub fn iter_entities_par(&self) -> rayon::slice::Iter<Entity> {
+        self.entities.par_iter()
     }
 
     pub fn num_entities(&self) -> usize {

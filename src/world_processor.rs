@@ -59,22 +59,12 @@ pub fn init(world: World) {
 pub fn draw() {
     graphics_window::clear(Color::BLACK);
 
-    let entity_slices = unsafe { WORLD.as_ref() }
-        .unwrap()
-        .entity_slices(PARALLELISM);
-
-    thread::scope(|scope| {
-        for slice in entity_slices {
-            scope.spawn(move || {
-                for entity in slice {
-                    let location = &entity.location;
-                    let x = location.x();
-                    let y = location.y();
-                    let pixel_color = entity.pixel_color();
-                    graphics_window::draw_pixel(x, y, pixel_color);
-                }
-            });
-        }
+    unsafe { WORLD.as_ref() }.unwrap().iter_entities_par().for_each(|entity| {
+        let location = &entity.location;
+        let x = location.x();
+        let y = location.y();
+        let pixel_color = entity.pixel_color();
+        graphics_window::draw_pixel(x, y, pixel_color);
     });
 }
 
