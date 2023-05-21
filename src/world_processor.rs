@@ -57,10 +57,10 @@ pub fn init(world: World) {
 
 pub fn draw() {
     graphics_window::clear(Color::BLACK);
+
     let entity_slices = unsafe { WORLD.as_ref() }
         .unwrap()
         .entity_slices(PARALLELISM);
-
 
     thread::scope(|scope| {
         for slice in entity_slices {
@@ -75,13 +75,6 @@ pub fn draw() {
             });
         }
     });
-
-    ////////////////////////
-    /*
-    if let Some(world) = unsafe { &WORLD } {
-        world.draw(graphics_buffer);
-    }
-    */
 }
 
 pub fn step() {
